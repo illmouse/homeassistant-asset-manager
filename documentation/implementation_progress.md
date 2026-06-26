@@ -106,7 +106,7 @@ integration in the devcontainer.
 
 ---
 
-## Phase 2 — Templates + Clone  `[ ]`
+## Phase 2 — Templates + Clone  `[x]`
 **Deliverable:** apply a template, clone an asset.
 
 **Plan**
@@ -125,10 +125,41 @@ source .venv/bin/activate
 pytest tests/components/asset_manager/test_templates.py -vv   # snapshot + behavior
 # manual: apply_template then inspect device registry; clone and compare entity counts
 ```
+Manual WS smoke:
+```jsonc
+// list builtin templates
+{"type":"asset_manager/templates/list"}
+// create asset then apply Vehicle preset (10 entities)
+{"type":"asset_manager/assets/create","name":"Car"}
+{"type":"asset_manager/apply_template","asset_id":"car","template_id":"vehicle"}
+// clone the asset (entities reproduced, serial blank)
+{"type":"asset_manager/clone_asset","source_asset_id":"car","name":"Car 2"}
+```
 
-**Result:** _(pending)_
+**Result:** Done. `Template` dataclass + `TEMPLATE_*` schemas in `models.py`
+(specs reuse per-kind config validation; `asset_id` absent from specs).
+`TemplateStorageCollection` in `storage.py`; `async_load_collections` now
+returns a `(assets, entities, templates)` 3-tuple. `async_seed_builtin_templates`
+loads the 7 JSON presets from `custom_components/asset_manager/templates/`
+idempotently on first load (skips ids already present). `ws.py` registers
+two bespoke commands: `asset_manager/apply_template` (idempotent — skips
+existing `{asset_id}-{slug}` storage ids) and `asset_manager/clone_asset`
+(creates a renamed asset with blank serial, copies all entity defs onto it).
+Coordinator takes `templates` as a 4th positional arg; bespoke commands
+registered from `async_setup_entry`. 12 new tests in `test_templates.py`
+(seeding, idempotency, WS CRUD, apply, clone, error codes, storage
+round-trip). 45 pytest tests pass total; ruff clean; pre-commit passes.
 
-**Session log:** _(none yet)_
+**Deviations:** `serial`/`icon`/`unit_of_measurement` are omitted from the
+clone payload when the source value is None (voluptuous `str`/`cv.icon`
+reject None even under `vol.Optional`); absence is valid.
+
+**Session log**
+- 2026-06-26 · `9ab9e1e` · Implemented `Template` model, `TemplateStorageCollection`,
+  7 bundled JSON presets, idempotent seeding, `ws.py` bespoke commands
+  (`apply_template`, `clone_asset`), coordinator wiring, 12 new tests.
+- 2026-06-26 · `b75b49f` · Recorded Phase 2 result in `implementation_plan.md`;
+  added "proceed to next phase" workflow to `AGENTS.md`.
 
 ---
 

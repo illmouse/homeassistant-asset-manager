@@ -8,28 +8,26 @@ templates, cloning, and derived sensors — fully UI-driven, no YAML.
 - Vision & overview: `documentation/draft_architecture.md`
 - Architecture: `documentation/architecture.md`
 - Phased plan: `documentation/implementation_plan.md`
+- Progress / hand-off: `documentation/implementation_progress.md`
+- Implementation process: `documentation/implementation_process.md`
 - Dev environment: `documentation/devcontainer-setup.md`
 
 ## "Proceed to next phase" workflow
-When the user says "proceed to next phase" (or similar):
-1. Read `documentation/implementation_plan.md` and find the first
-   phase whose heading is NOT marked `✅ DONE`.
-2. Read the relevant existing source under
-   `custom_components/asset_manager/` and `tests/components/asset_manager/`
-   to match established patterns before extending.
-3. Implement the phase's deliverables, respecting the architectural
-   invariants below and the coding conventions (match HA core).
-4. Verify in the devcontainer: `ruff check . && ruff format . &&
-   pytest tests/components/asset_manager/ -q` (run inside container
-   `loving_sutherland` via
+When the user says "proceed to next phase" (or similar), follow the
+process in `documentation/implementation_process.md` verbatim. Summary:
+1. Orient: read `implementation_plan.md` (first non-`✅ DONE` phase),
+   the target phase section of `implementation_progress.md`, and the
+   relevant existing source under `custom_components/asset_manager/`.
+2. Plan + implement to ~95% confidence, matching existing patterns.
+3. Verify inside the devcontainer (`loving_sutherland`) — the host
+   venv is broken:
    `docker exec -w /workspaces/homeassistant-asset-manager loving_sutherland
-   bash -lc 'source .venv/bin/activate && ...'` — the host venv is broken).
-5. Mark the phase heading `✅ DONE (commit <short>)` in
-   `documentation/implementation_plan.md` with a Result subsection
-   listing files touched, deviations, and test counts.
-6. Update the Phase tracker below.
-7. Commit from inside the container so the pre-commit hook
-   (ruff, ruff-format) can run — the host lacks the venv.
+   bash -lc 'source .venv/bin/activate && ruff check . && ruff format .
+   && pytest tests/components/asset_manager/ -q'`.
+4. Record in `implementation_progress.md` (status, Result, Session log)
+   and mark `✅ DONE (commit <sha>)` in `implementation_plan.md`.
+5. Update the Phase tracker below.
+6. Commit from inside the container so the pre-commit hook runs.
 
 ## Layout
 ```
