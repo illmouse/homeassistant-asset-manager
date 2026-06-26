@@ -30,7 +30,7 @@ Deliverable: create/edit/delete assets and entities via WebSocket.
 Exit criteria: `wscat` against HA can create an asset, add a number
 entity, set its value, and the device+entity appear in HA UI.
 
-## Phase 2 — Templates + Clone
+## Phase 2 — Templates + Clone ✅ DONE (commit `9ab9e1e`)
 Deliverable: apply a template, clone an asset.
 - `TemplateStorageCollection` with prefix `asset_manager/templates/*`.
 - Bundled JSON presets: Vehicle, HVAC, Water Filter, Appliance,
@@ -39,6 +39,25 @@ Deliverable: apply a template, clone an asset.
 - Template editor in storage layer (frontend deferred to Phase 4).
 Exit criteria: applying "Vehicle" creates ~10 entities on a new asset;
 cloning reproduces all entities onto a renamed asset.
+
+Result:
+- `Template` dataclass + `TEMPLATE_*` schemas in `models.py` (specs
+  reuse per-kind config validation; `asset_id` absent from specs).
+- `TemplateStorageCollection` in `storage.py`; `async_load_collections`
+  now returns `(assets, entities, templates)` 3-tuple.
+- `async_seed_builtin_templates` loads the 7 JSON presets from
+  `custom_components/asset_manager/templates/` idempotently on first
+  load (skips ids already present).
+- `ws.py` registers `asset_manager/apply_template` (idempotent — skips
+  existing `{asset_id}-{slug}` ids) and `asset_manager/clone_asset`
+  (creates a renamed asset with blank serial, copies all entity defs).
+- Coordinator takes `templates` as 4th positional arg; bespoke
+  commands registered from `async_setup_entry`.
+- Tests: 12 new in `test_templates.py` (seeding, idempotency, WS CRUD,
+  apply, clone, error codes, storage round-trip). 45 total, ruff clean.
+- Deviation: `serial`/`icon`/`unit_of_measurement` omitted from clone
+  payload when source value is None (voluptuous `str`/`cv.icon` reject
+  None even when optional); absence is valid.
 
 ## Phase 3 — Derived sensors
 Deliverable: automatic `sensor.asset_*` computed from manual entities.
