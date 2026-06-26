@@ -278,7 +278,7 @@ already awaits platform setup. (4) Fixed a pre-existing Phase 2 blocking
 takes `hass` as its first arg.
 
 **Session log**
-- 2026-06-26 · Phase 4 commit (pending) · Added `panel.py`,
+- 2026-06-26 · `96dd815` · Added `panel.py`,
   `frontend/asset-manager-panel.js` (single-file custom panel),
   `test_panel.py` (5 tests); wired panel register/remove into
   `__init__.py`; removed deadlocking `async_block_till_done` from

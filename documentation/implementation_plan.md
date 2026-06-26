@@ -85,7 +85,7 @@ Result:
 - Deviations: recompute driven by entity-collection listener (not
   `EVENT_STATE_CHANGED`); None-aware arithmetic; self-reference → None.
 
-## Phase 4 — Frontend panel ✅ DONE (commit pending)
+## Phase 4 — Frontend panel ✅ DONE (commit `96dd815`)
 Deliverable: Settings → Asset Manager UI.
 - `frontend_extra/asset_manager/` panel source (compiled to `frontend/`).
 - Views: AssetList, AssetDetail (Info/Entities tabs),
