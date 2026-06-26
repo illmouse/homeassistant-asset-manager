@@ -1,0 +1,174 @@
+/**
+ * Asset Manager — shared CSS styles + style injector.
+ *
+ * `STYLES` is one big template literal — the panel renders it into a
+ * `<style>` node inside its shadow root and also injects a copy into
+ * `document.head` for light-DOM children (toasts/modals). The injector is
+ * idempotent so repeated calls are cheap.
+ */
+
+import { PLACEHOLDER_COLOR } from "./constants.js";
+
+export const TOAST_HOST_ID = "am-toast-host";
+
+export const STYLES = `
+  .am-root { padding: 16px; max-width: 1100px; margin: 0 auto;
+             font-family: var(--paper-font-body1_-_font-family, inherit); }
+  .am-title { font-size: 24px; font-weight: 500; margin: 0 0 16px; }
+  .am-card { background: var(--card-background-color, #fff); border-radius: 8px;
+             box-shadow: 0 1px 3px rgba(0,0,0,.12); padding: 16px; margin-bottom: 16px; }
+  .am-row { display: flex; align-items: center; gap: 12px; padding: 8px 0;
+            border-bottom: 1px solid var(--divider-color, #eee); }
+  .am-row:last-child { border-bottom: none; }
+  .am-grow { flex: 1; min-width: 0; }
+  .am-btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .am-btn { background: var(--primary-color, #03a9f4); color: #fff; border: none;
+            padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;
+            transition: opacity .15s ease, filter .15s ease; }
+  .am-btn:hover { filter: brightness(1.08); }
+  .am-btn.secondary { background: var(--secondary-background-color, #888); color: #fff; }
+  .am-btn.danger { background: var(--error-state-color, #db4437); }
+  .am-btn[disabled] { opacity: .5; cursor: not-allowed; filter: none; }
+  .am-input, .am-select, .am-textarea {
+    padding: 8px; border: 1px solid var(--divider-color, #ccc);
+    border-radius: 4px; font-size: 14px; width: 100%;
+    box-sizing: border-box; font-family: inherit;
+    /* Tell the browser to render native widgets (select arrow, date
+       picker, checkbox) in the theme's color scheme. Without this the
+       UA may paint a light arrow on a light fill or vice-versa. */
+    color-scheme: light dark;
+    /* HA exposes --input-fill-color (fill) and --input-ink-color (text)
+       on modern builds; fall back to card-background + primary-text for
+       older builds, then to sensible literals. Never use
+       --input-background-color — it is not defined by HA and would
+       fall back to white, which on a dark theme renders the field
+       unreadable. */
+    background: var(--input-fill-color, var(--card-background-color, #1c1c1c));
+    color: var(--input-ink-color, var(--primary-text-color, #e1e1e1));
+  }
+  /* Style the <select> dropdown arrow explicitly so it tracks the
+     theme instead of using the UA default (which can be invisible
+     on dark fills). The appearance:none reset lets us substitute
+     our own chevron via background-image. */
+  .am-select {
+    appearance: none; -webkit-appearance: none;
+    padding-right: 28px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%23989898' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    /* Preserve the themed fill behind the arrow. */
+    background-color: var(--input-fill-color, var(--card-background-color, #1c1c1c));
+  }
+  .am-input::placeholder, .am-textarea::placeholder {
+    color: ${PLACEHOLDER_COLOR};
+  }
+  /* Selects have no ::placeholder; an unselected <select> shows the
+     first <option> in the input color. Keep that readable too. */
+  .am-select:invalid { color: ${PLACEHOLDER_COLOR}; }
+  .am-textarea { font-family: var(--paper-font-body1_-_font-family, monospace);
+                 min-height: 80px; resize: vertical; }
+  .am-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary-color, #03a9f4); }
+  .am-switch { position: relative; width: 36px; height: 20px; cursor: pointer; flex: 0 0 auto; }
+  .am-switch input { opacity: 0; width: 0; height: 0; }
+  .am-switch .am-switch-track { position: absolute; inset: 0; background: var(--divider-color, #bbb);
+                                border-radius: 999px; transition: background .2s ease; }
+  .am-switch .am-switch-thumb { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+                                background: #fff; border-radius: 50%; transition: transform .2s ease;
+                                box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+  .am-switch input:checked + .am-switch-track { background: var(--primary-color, #03a9f4); }
+  .am-switch input:checked + .am-switch-track + .am-switch-thumb { transform: translateX(16px); }
+  .am-modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4);
+                 display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .am-modal { background: var(--card-background-color, #fff); border-radius: 8px;
+              padding: 24px; max-width: 560px; width: 90%; max-height: 85vh; overflow: auto; }
+  .am-modal-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .am-confirm-body { margin-bottom: 8px; line-height: 1.5; }
+  .am-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--divider-color, #eee);
+             margin-bottom: 16px; flex-wrap: wrap; }
+  .am-tab { padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent;
+            color: var(--secondary-text-color, #888); }
+  .am-tab.active { border-bottom-color: var(--primary-color, #03a9f4);
+                   font-weight: 500; color: var(--primary-text-color, #000); }
+  .am-muted { color: var(--secondary-text-color, #888); font-style: italic; }
+  .am-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+  .am-field label { display: block; font-size: 12px; margin-bottom: 4px;
+                    color: var(--secondary-text-color, #888); }
+  .am-error { color: var(--error-state-color, #db4437); font-size: 13px; margin-top: 8px; }
+  .am-empty { text-align: center; padding: 32px 16px; color: var(--secondary-text-color, #888); }
+  .am-empty .am-empty-icon { font-size: 40px; margin-bottom: 8px; opacity: .5; }
+  .am-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .am-toolbar .am-grow { flex: 1 1 200px; }
+  .am-entity-summary { display: flex; flex-direction: column; line-height: 1.35; min-width: 0; }
+  .am-entity-summary .am-entity-name { font-weight: 500; overflow: hidden;
+                                        text-overflow: ellipsis; white-space: nowrap; }
+  .am-entity-summary .am-entity-meta { color: var(--secondary-text-color, #888); font-size: 13px;
+                                        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .am-batch-bar { display: flex; gap: 8px; align-items: center; padding: 8px 0;
+                  border-bottom: 1px solid var(--divider-color, #eee); margin-bottom: 8px;
+                  color: var(--secondary-text-color, #888); font-size: 13px; flex-wrap: wrap; }
+  .am-inline-value { width: 120px; flex: 0 0 auto; }
+  .am-spinner { width: 16px; height: 16px; border: 2px solid var(--divider-color, #ccc);
+                border-top-color: var(--primary-color, #03a9f4); border-radius: 50%;
+                display: inline-block; animation: am-spin 0.8s linear infinite;
+                vertical-align: middle; margin-right: 6px; }
+  @keyframes am-spin { to { transform: rotate(360deg); } }
+
+  /* Filter controls on the asset list */
+  .am-filters { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .am-filters .am-search { flex: 1 1 220px; margin: 0; }
+  .am-sort { flex: 0 0 auto; }
+  .am-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .am-tag-chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+                 border: 1px solid var(--divider-color, #ccc); color: var(--secondary-text-color, #888);
+                 background: var(--card-background-color, #fff); transition: all .15s ease; }
+  .am-tag-chip.active { background: var(--primary-color, #03a9f4); color: #fff;
+                        border-color: var(--primary-color, #03a9f4); }
+
+  /* Entity / template editor */
+  .am-config-section { margin-top: 12px; }
+  .am-options-list { display: flex; flex-direction: column; gap: 6px; }
+  .am-option-row { display: flex; gap: 6px; align-items: center; }
+  .am-option-row .am-input { flex: 1 1 auto; }
+  .am-option-row .am-btn { padding: 6px 10px; flex: 0 0 auto; }
+  .am-advanced-toggle { margin-top: 12px; }
+  .am-advanced-toggle summary { cursor: pointer; color: var(--secondary-text-color, #888); font-size: 13px; }
+
+  .am-spec-row { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0;
+                 border-bottom: 1px solid var(--divider-color, #eee); }
+  .am-spec-row:last-child { border-bottom: none; }
+  .am-spec-row .am-spec-summary { flex: 1 1 auto; min-width: 0; }
+  .am-spec-row .am-spec-summary > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .am-spec-row .am-spec-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+  .am-spec-row .am-btn { padding: 4px 10px; font-size: 12px; }
+
+  /* Toasts */
+  #${TOAST_HOST_ID} { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+                      z-index: 200; display: flex; flex-direction: column; gap: 8px;
+                      align-items: center; pointer-events: none; }
+  .am-toast { background: var(--card-background-color, #333); color: var(--primary-text-color, #fff);
+              padding: 10px 16px; border-radius: 6px; box-shadow: 0 3px 8px rgba(0,0,0,.25);
+              font-size: 14px; max-width: 90vw; opacity: 0; transform: translateY(8px);
+              transition: opacity .2s ease, transform .2s ease; cursor: pointer;
+              pointer-events: auto; border-left: 4px solid var(--primary-color, #03a9f4); }
+  .am-toast.am-toast-error { border-left-color: var(--error-state-color, #db4437); }
+  .am-toast.am-toast-success { border-left-color: var(--state-active-color, #4caf50); }
+  .am-toast.am-toast-show { opacity: 1; transform: translateY(0); }
+
+  /* Narrow (mobile) layout */
+  .am-root.am-narrow { padding: 8px; }
+  .am-root.am-narrow .am-grid { grid-template-columns: 1fr; }
+  .am-root.am-narrow .am-row { flex-wrap: wrap; }
+  .am-root.am-narrow .am-btn-row .am-btn { flex: 1 1 auto; }
+  .am-root.am-narrow .am-inline-value { width: 100%; flex: 1 1 100%; }
+  .am-root.am-narrow .am-batch-bar .am-btn { flex: 1 1 auto; }
+  .am-root.am-narrow .am-filters { flex-direction: column; align-items: stretch; }
+  .am-root.am-narrow .am-sort { width: 100%; }
+`;
+
+export const injectStyles = () => {
+  if (document.getElementById("am-panel-styles")) return;
+  const s = document.createElement("style");
+  s.id = "am-panel-styles";
+  s.textContent = STYLES;
+  document.head.appendChild(s);
+};

@@ -1,0 +1,381 @@
+/**
+ * Asset Manager — modal dialogs.
+ *
+ * Five Promise-free modal builders (they call back into the caller on
+ * success instead of returning values):
+ *   - assetCreateDialog       — name + optional template to seed entities
+ *   - cloneDialog             — clone an existing asset under a new name
+ *   - templatePickerDialog    — apply a template to an existing asset
+ *   - entityEditorDialog      — kind-aware create/edit of one entity
+ *   - templateEditorDialog    — full entity-spec list editor for templates
+ *
+ * Every dialog uses `openModal`/`withBusy`/`showToast` from `ui.js` and
+ * the kind-aware config builder from `config-fields.js`.
+ */
+
+import { h, clear } from "./dom.js";
+import { ENTITY_KINDS, KIND_HAS_UNIT, KIND_HAS_VALUE } from "./constants.js";
+import {
+  templateList,
+  templateCreate,
+  templateUpdate,
+  templateDelete,
+  createAsset,
+  createEntity,
+  updateEntity,
+  deleteEntity,
+  applyTemplate,
+  cloneAsset,
+} from "./ws.js";
+import { showToast, openModal, confirmDialog, withBusy } from "./ui.js";
+import { buildConfigFields } from "./config-fields.js";
+
+// Asset creation dialog: name + optional template. When a template is
+// selected, create the asset then apply the template in sequence.
+export function assetCreateDialog(hass, onCreated) {
+  const nameInput = h("input", { class: "am-input", placeholder: "Asset name (e.g. My Car)" });
+  const templateSelect = h("select", { class: "am-select" },
+    h("option", { value: "" }, "Blank asset — no template"));
+  const err = h("div", { class: "am-error" });
+  const submit = h("button", { class: "am-btn" }, "Create");
+  const close = h("button", { class: "am-btn secondary" }, "Cancel");
+  const form = h("div", {},
+    h("h3", {}, "New asset"),
+    h("div", { class: "am-field", style: "margin-bottom:12px" },
+      h("label", {}, "Name"), nameInput),
+    h("div", { class: "am-field", style: "margin-bottom:12px" },
+      h("label", {}, "Start from template"), templateSelect),
+    err,
+    h("div", { class: "am-modal-actions" }, submit, close));
+  const modal = openModal(form);
+  close.addEventListener("click", () => modal.remove());
+
+  // Populate template options (built-in + user templates).
+  templateList(hass).then((templates) => {
+    for (const t of [...templates].sort((a, b) => a.name.localeCompare(b.name))) {
+      templateSelect.append(h("option", { value: t.id },
+        `${t.name} (${t.entities?.length || 0} entities)`));
+    }
+  }).catch(() => { /* leave blank-only option */ });
+
+  submit.addEventListener("click", async () => {
+    const name = nameInput.value.trim();
+    if (!name) { nameInput.focus(); return; }
+    const templateId = templateSelect.value;
+    err.textContent = "";
+    try {
+      await withBusy(submit, async () => {
+        const asset = await createAsset(hass, name);
+        if (templateId) {
+          try { await applyTemplate(hass, asset.id, templateId); }
+          catch (e) {
+            showToast(`Asset created, but template failed: ${e.message || e}`, "error", 6000);
+          }
+        }
+        modal.remove();
+        onCreated(asset.id);
+        showToast(`Created “${name}”`, "success");
+      });
+    } catch (e) { err.textContent = String(e.message || e); }
+  });
+  nameInput.focus();
+}
+
+export function cloneDialog(hass, sourceAsset, onDone) {
+  const input = h("input", { class: "am-input", placeholder: `Clone of ${sourceAsset.name}` });
+  const err = h("div", { class: "am-error" });
+  const submit = h("button", { class: "am-btn" }, "Clone");
+  const close = h("button", { class: "am-btn secondary" }, "Cancel");
+  const form = h("div", {},
+    h("h3", {}, `Clone “${sourceAsset.name}”`),
+    h("p", { class: "am-muted" }, "Creates a new asset with a blank serial and copies every entity definition."),
+    h("div", { class: "am-field" }, h("label", {}, "New asset name"), input),
+    err,
+    h("div", { class: "am-modal-actions" }, submit, close));
+  const modal = openModal(form);
+  close.addEventListener("click", () => modal.remove());
+  submit.addEventListener("click", async () => {
+    const name = input.value.trim();
+    if (!name) { input.focus(); return; }
+    err.textContent = "";
+    try {
+      await withBusy(submit, async () => {
+        await cloneAsset(hass, sourceAsset.id, name);
+        modal.remove();
+        onDone();
+        showToast(`Cloned “${sourceAsset.name}” → “${name}”`, "success");
+      });
+    } catch (e) { err.textContent = String(e.message || e); }
+  });
+  input.focus();
+}
+
+export function templatePickerDialog(hass, asset, onApplied) {
+  const err = h("div", { class: "am-error" });
+  const list = h("div", {});
+  const close = h("button", { class: "am-btn secondary" }, "Close");
+  const modal = openModal(h("div", {},
+    h("h3", {}, `Apply template to “${asset.name}”`),
+    h("p", { class: "am-muted" }, "Existing entities with the same slug are skipped."),
+    list, err,
+    h("div", { class: "am-modal-actions" }, close)));
+  close.addEventListener("click", () => modal.remove());
+  list.append(h("p", { class: "am-muted" }, h("span", { class: "am-spinner" }), "Loading templates…"));
+  templateList(hass).then((templates) => {
+    clear(list);
+    if (!templates.length) {
+      list.append(h("p", { class: "am-muted" }, "No templates available."));
+      return;
+    }
+    for (const t of [...templates].sort((a, b) => a.name.localeCompare(b.name))) {
+      const applyBtn = h("button", { class: "am-btn" }, "Apply");
+      const row = h("div", { class: "am-row" },
+        h("span", { class: "am-grow" }, `${t.name} (${t.entities?.length || 0} entities)`),
+        applyBtn);
+      applyBtn.addEventListener("click", async () => {
+        err.textContent = "";
+        try {
+          await withBusy(applyBtn, async () => {
+            const created = await applyTemplate(hass, asset.id, t.id);
+            modal.remove();
+            onApplied(created);
+            showToast(`Applied template “${t.name}” (${created.length} entities added)`, "success");
+          });
+        } catch (e) { err.textContent = String(e.message || e); }
+      });
+      list.append(row);
+    }
+  }).catch((e) => { err.textContent = String(e.message || e); });
+}
+
+// Entity editor: kind-aware. Switching the kind rebuilds the config
+// fields and shows/hides the unit & initial-value fields.
+export function entityEditorDialog(hass, asset, entity, onSaved) {
+  const isEdit = !!entity;
+  const slug = h("input", { class: "am-input", value: entity?.slug || "", placeholder: "mileage" });
+  const name = h("input", { class: "am-input", value: entity?.name || "", placeholder: "Mileage" });
+  const kind = h("select", { class: "am-select" },
+    ...ENTITY_KINDS.map((k) => h("option", { value: k, selected: entity?.kind === k }, k)));
+  const unit = h("input", { class: "am-input", value: entity?.unit_of_measurement || "", placeholder: "km, °C, …" });
+  const icon = h("input", { class: "am-input", value: entity?.icon || "", placeholder: "mdi:counter" });
+  const enabledLabel = h("label", { style: "display:flex; align-items:center; gap:8px; cursor:pointer" });
+  const enabledInput = h("input", { type: "checkbox", class: "am-checkbox" });
+  enabledInput.checked = entity ? entity.enabled : true;
+  enabledLabel.append(enabledInput, h("span", {}, "Enabled"));
+  const valueInput = h("input", { class: "am-input",
+    value: entity?.value == null ? "" : String(entity.value), placeholder: "initial value" });
+
+  const err = h("div", { class: "am-error" });
+  const submit = h("button", { class: "am-btn" }, isEdit ? "Save" : "Create");
+  const delBtn = isEdit ? h("button", { class: "am-btn danger" }, "Delete") : null;
+  const close = h("button", { class: "am-btn secondary" }, "Cancel");
+
+  // Reusable containers so we can rebuild inner sections on kind change.
+  const configHolder = h("div", {});
+  const unitHolder = h("div", {});
+  const valueHolder = h("div", {});
+  let configFields = null;
+
+  const syncFieldsForKind = (k) => {
+    configFields = buildConfigFields(k, entity?.config || {});
+    clear(configHolder).append(h("div", { class: "am-field" }, h("label", {}, "Config"), configFields.container));
+    // Show/hide unit + value based on kind.
+    clear(unitHolder);
+    if (KIND_HAS_UNIT.has(k)) unitHolder.append(h("div", { class: "am-field" }, h("label", {}, "Unit"), unit));
+    clear(valueHolder);
+    if (KIND_HAS_VALUE.has(k)) valueHolder.append(h("div", { class: "am-field" }, h("label", {}, "Initial value"), valueInput));
+  };
+  syncFieldsForKind(entity?.kind || "number");
+  kind.addEventListener("change", () => syncFieldsForKind(kind.value));
+
+  const form = h("div", {},
+    h("h3", {}, isEdit ? `Edit ${entity.slug}` : "New entity"),
+    h("div", { class: "am-grid" },
+      h("div", { class: "am-field" }, h("label", {}, "Slug"), slug),
+      h("div", { class: "am-field" }, h("label", {}, "Display name"), name),
+      h("div", { class: "am-field" }, h("label", {}, "Kind"), kind),
+      h("div", { class: "am-field" }, h("label", {}, "Icon"), icon),
+      h("div", { class: "am-field" }, h("label", {}, "Enabled"), enabledLabel),
+      unitHolder),
+    configHolder,
+    valueHolder,
+    err,
+    h("div", { class: "am-modal-actions" }, submit, delBtn, close));
+  const modal = openModal(form);
+  close.addEventListener("click", () => modal.remove());
+
+  const buildPayload = () => {
+    const payload = {
+      slug: slug.value.trim(),
+      name: name.value.trim(),
+      kind: kind.value,
+      enabled: enabledInput.checked,
+      config: configFields.read(),
+    };
+    if (icon.value.trim()) payload.icon = icon.value.trim();
+    if (KIND_HAS_UNIT.has(payload.kind) && unit.value.trim()) payload.unit_of_measurement = unit.value.trim();
+    if (KIND_HAS_VALUE.has(payload.kind)) {
+      const v = valueInput.value.trim();
+      if (v !== "") {
+        if (v === "true") payload.value = true;
+        else if (v === "false") payload.value = false;
+        else if (!isNaN(Number(v))) payload.value = Number(v);
+        else payload.value = v;
+      }
+    }
+    return payload;
+  };
+
+  submit.addEventListener("click", async () => {
+    err.textContent = "";
+    if (!slug.value.trim()) { slug.focus(); return; }
+    if (!name.value.trim()) { name.focus(); return; }
+    try {
+      await withBusy(submit, async () => {
+        const payload = buildPayload();
+        if (isEdit) await updateEntity(hass, entity.id, payload);
+        else await createEntity(hass, { ...payload, asset_id: asset.id });
+        modal.remove();
+        onSaved();
+        showToast(isEdit ? "Entity saved" : "Entity created", "success");
+      });
+    } catch (e) { err.textContent = String(e.message || e); }
+  });
+  if (delBtn) delBtn.addEventListener("click", async () => {
+    err.textContent = "";
+    const ok = await confirmDialog(`Delete entity “${entity.slug}”? This removes it from the asset.`,
+      { danger: true, confirmLabel: "Delete" });
+    if (!ok) return;
+    try {
+      await withBusy(delBtn, async () => {
+        await deleteEntity(hass, entity.id);
+        modal.remove();
+        onSaved();
+        showToast("Entity deleted", "success");
+      });
+    } catch (e) { err.textContent = String(e.message || e); }
+  });
+}
+
+// Full entity-spec editor: name + icon + a list of entity specs, each
+// editable via the kind-aware entity editor (reusing the same config
+// field builder). Used for create + edit.
+export function templateEditorDialog(hass, template, onSaved) {
+  const isEdit = !!template;
+  const name = h("input", { class: "am-input", value: template?.name || "", placeholder: "My Template" });
+  const icon = h("input", { class: "am-input", value: template?.icon || "", placeholder: "mdi:car (optional)" });
+  const err = h("div", { class: "am-error" });
+  const specs = (template?.entities || []).map((s) => ({ ...s, config: { ...s.config } }));
+  const specsList = h("div", {});
+
+  const renderSpecs = () => {
+    clear(specsList);
+    specs.forEach((spec, i) => {
+      const cfgFields = buildConfigFields(spec.kind, spec.config);
+      const kindSel = h("select", { class: "am-select" },
+        ...ENTITY_KINDS.map((k) => h("option", { value: k, selected: spec.kind === k }, k)));
+      kindSel.addEventListener("change", () => {
+        spec.kind = kindSel.value;
+        spec.config = {};
+        renderSpecs();
+      });
+      const slugInp = h("input", { class: "am-input", value: spec.slug || "" });
+      slugInp.addEventListener("change", () => { spec.slug = slugInp.value.trim(); });
+      const nameInp = h("input", { class: "am-input", value: spec.name || "" });
+      nameInp.addEventListener("change", () => { spec.name = nameInp.value.trim(); });
+      const unitInp = h("input", { class: "am-input", value: spec.unit_of_measurement || "", placeholder: "unit" });
+      unitInp.addEventListener("change", () => { spec.unit_of_measurement = unitInp.value || undefined; });
+      const rm = h("button", { class: "am-btn danger" }, "Remove");
+      rm.addEventListener("click", () => { specs.splice(i, 1); renderSpecs(); });
+      const row = h("div", { class: "am-spec-row" },
+        h("div", { class: "am-spec-summary" },
+          h("div", {},
+            h("span", { style: "font-weight:500" }, spec.name || "(unnamed)"),
+            h("span", { class: "am-muted" }, ` · ${spec.slug || "(no slug)"} · ${spec.kind}`)),
+          h("div", { style: "display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-top:6px" },
+            h("div", { class: "am-field" }, h("label", {}, "Slug"), slugInp),
+            h("div", { class: "am-field" }, h("label", {}, "Name"), nameInp),
+            h("div", { class: "am-field" }, h("label", {}, "Unit"), unitInp)),
+          h("div", { class: "am-field", style: "margin-top:6px" }, h("label", {}, "Kind"), kindSel),
+          cfgFields.container),
+        h("div", { class: "am-spec-actions" }, rm));
+      specsList.append(row);
+      // Stash the config reader so we can collect on submit.
+      spec._read = cfgFields.read;
+    });
+  };
+  renderSpecs();
+
+  const addSpec = h("button", { class: "am-btn secondary" }, "+ Add entity spec");
+  addSpec.addEventListener("click", () => {
+    specs.push({ slug: "", name: "", kind: "number", config: {} });
+    renderSpecs();
+  });
+
+  const submit = h("button", { class: "am-btn" }, isEdit ? "Save" : "Create");
+  const delBtn = isEdit ? h("button", { class: "am-btn danger" }, "Delete") : null;
+  const close = h("button", { class: "am-btn secondary" }, "Cancel");
+  const form = h("div", {},
+    h("h3", {}, isEdit ? `Edit ${template.name}` : "New template"),
+    h("div", { class: "am-grid" },
+      h("div", { class: "am-field" }, h("label", {}, "Name"), name),
+      h("div", { class: "am-field" }, h("label", {}, "Icon"), icon)),
+    h("h4", { style: "margin:16px 0 8px" }, "Entity specs"),
+    specsList,
+    addSpec,
+    err,
+    h("div", { class: "am-modal-actions" }, submit, delBtn, close));
+  const modal = openModal(form);
+  close.addEventListener("click", () => modal.remove());
+
+  const buildPayload = () => {
+    const entities = specs.map((s) => {
+      const spec = {
+        slug: s.slug.trim(),
+        name: s.name.trim(),
+        kind: s.kind,
+        config: s._read ? s._read() : (s.config || {}),
+      };
+      if (s.unit_of_measurement) spec.unit_of_measurement = s.unit_of_measurement;
+      if (s.icon) spec.icon = s.icon;
+      if (s.value != null) spec.value = s.value;
+      return spec;
+    });
+    if (!entities.length) throw new Error("Add at least one entity spec.");
+    for (const e of entities) {
+      if (!e.slug || !e.name) throw new Error("Each spec needs a slug and name.");
+    }
+    const payload = { name: name.value.trim(), entities };
+    if (icon.value.trim()) payload.icon = icon.value.trim();
+    return payload;
+  };
+
+  submit.addEventListener("click", async () => {
+    err.textContent = "";
+    if (!name.value.trim()) { name.focus(); return; }
+    try {
+      await withBusy(submit, async () => {
+        const payload = buildPayload();
+        if (isEdit) await templateUpdate(hass, template.id, payload);
+        else await templateCreate(hass, payload);
+        modal.remove();
+        onSaved();
+        showToast(isEdit ? "Template saved" : "Template created", "success");
+      });
+    } catch (e) { err.textContent = String(e.message || e); }
+  });
+  if (delBtn) delBtn.addEventListener("click", async () => {
+    err.textContent = "";
+    const ok = await confirmDialog(`Delete template “${template.name}”?`,
+      { danger: true, confirmLabel: "Delete" });
+    if (!ok) return;
+    try {
+      await withBusy(delBtn, async () => {
+        await templateDelete(hass, template.id);
+        modal.remove();
+        onSaved();
+        showToast("Template deleted", "success");
+      });
+    } catch (e) { err.textContent = String(e.message || e); }
+  });
+}

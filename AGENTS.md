@@ -42,7 +42,16 @@ custom_components/asset_manager/   # the integration (ships to HA)
   entity.py
   derived.py
   panel.py
-  frontend/asset-manager-panel.js
+  frontend/                  # modular ES modules (no build step)
+    asset-manager-panel.js   # entry: AssetManagerPanel class + customElements.define
+    constants.js             # DOMAIN, ENTITY_KINDS, kind→capability sets
+    dom.js                   # h() hyperscript helper, clear()
+    ws.js                    # WebSocket CRUD + subscribe wrappers
+    styles.js                # STYLES string + injectStyles()
+    ui.js                    # toast, confirmDialog, withBusy, openModal, makeSwitch
+    config-fields.js         # kind-aware entity config field builder
+    dialogs.js               # 5 modal dialogs (asset/clone/templatePicker/entity/templateEditor)
+    views.js                 # 3 view renderers (list/detail/templates)
 tests/components/asset_manager/    # pytest (mirrors HA core layout)
 documentation/                     # architecture + plans
 .devcontainer/                    # local HA dev environment

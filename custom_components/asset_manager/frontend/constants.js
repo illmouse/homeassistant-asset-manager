@@ -1,0 +1,38 @@
+/**
+ * Asset Manager — shared constants.
+ *
+ * Centralised domain string, entity-kind catalogue, and the kind→capability
+ * sets used by both the entity editor and the inline value editor. Kept in
+ * its own module so every other module imports a single source of truth
+ * instead of re-declaring literals.
+ */
+
+export const DOMAIN = "asset_manager";
+
+export const ENTITY_KINDS = [
+  "number",
+  "sensor",
+  "date",
+  "text",
+  "select",
+  "button",
+  "switch",
+  "derived",
+];
+
+export const wsPrefix = (coll) => `${DOMAIN}/${coll}`;
+
+// Kinds that accept a unit_of_measurement.
+export const KIND_HAS_UNIT = new Set(["number", "sensor", "derived"]);
+// Kinds that accept an initial value (writable / stateful).
+export const KIND_HAS_VALUE = new Set(["number", "text", "select", "date", "switch"]);
+
+// Placeholder colour token. Uses HA's own placeholder variable
+// (`--ha-color-neutral-60`, the same one `ha-input` uses for ::placeholder)
+// so dark themes stay legible. Falls back to `--secondary-text-color` for
+// older HA builds that don't define the neutral scale, then to a hardcoded
+// grey. No opacity multiplier: HA's neutral-60 is already tuned for contrast
+// on both light and dark card backgrounds; dimming it collapses to ~#6e6e6e
+// on dark themes which is unreadable.
+export const PLACEHOLDER_COLOR =
+  "var(--ha-color-neutral-60, var(--secondary-text-color, #989898))";
