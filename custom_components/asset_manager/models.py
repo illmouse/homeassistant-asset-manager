@@ -33,6 +33,7 @@ KIND_TEXT = "text"
 KIND_SELECT = "select"
 KIND_BUTTON = "button"
 KIND_SWITCH = "switch"
+KIND_DERIVED = "derived"
 
 ENTITY_KINDS = (
     KIND_NUMBER,
@@ -42,6 +43,7 @@ ENTITY_KINDS = (
     KIND_SELECT,
     KIND_BUTTON,
     KIND_SWITCH,
+    KIND_DERIVED,
 )
 
 NUMBER_CONFIG_SCHEMA = vol.Schema(
@@ -80,6 +82,18 @@ SWITCH_CONFIG_SCHEMA = vol.Schema({})
 BUTTON_CONFIG_SCHEMA = vol.Schema({})
 DATE_CONFIG_SCHEMA = vol.Schema({})
 
+CONF_FORMULA = "formula"
+CONF_STATE_CLASS = "state_class"
+CONF_DEVICE_CLASS = "device_class"
+
+DERIVED_CONFIG_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_FORMULA): vol.All(str, vol.Length(min=1)),
+        vol.Optional(CONF_DEVICE_CLASS): str,
+        vol.Optional(CONF_STATE_CLASS): str,
+    }
+)
+
 
 def _entity_config_validator(kind: str) -> vol.Schema:
     """Return the config schema for the given entity kind."""
@@ -91,6 +105,7 @@ def _entity_config_validator(kind: str) -> vol.Schema:
         KIND_SELECT: SELECT_CONFIG_SCHEMA,
         KIND_BUTTON: BUTTON_CONFIG_SCHEMA,
         KIND_SWITCH: SWITCH_CONFIG_SCHEMA,
+        KIND_DERIVED: DERIVED_CONFIG_SCHEMA,
     }[kind]
 
 

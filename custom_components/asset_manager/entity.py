@@ -362,6 +362,64 @@ class AssetDateEntity(AssetEntityMixin, DateEntity):
         self._attr_native_value = _parse_date(state)
 
 
+class AssetDerivedEntity(AssetEntityMixin, SensorEntity):
+    """A read-only sensor computed from sibling entities on the asset.
+
+    State is set by `set_derived_value` (called from `DerivedEvaluator`)
+    rather than read from the EntityDef `value`; the stored `value` is
+    only a cache of the last computed result.
+    """
+
+    _attr_native_value: float | int | str | bool | date | None
+
+    def init_from_def(
+        self,
+        entity_def: EntityDef,
+        collection: EntityStorageCollection,
+        asset_name: str,
+    ) -> None:
+        """Populate attributes from an EntityDef."""
+        super().init_from_def(entity_def, collection, asset_name)
+        cfg = entity_def.config
+        if "device_class" in cfg:
+            self._attr_device_class = cfg["device_class"]
+        if "state_class" in cfg:
+            self._attr_state_class = cfg["state_class"]
+        self._attr_native_unit_of_measurement = entity_def.unit_of_measurement
+        self._attr_native_value = entity_def.value
+
+    @override
+    @callback
+    def async_update_def(self, entity_def: EntityDef) -> None:
+        """Apply a new EntityDef (collection update)."""
+        cfg = entity_def.config
+        if "device_class" in cfg:
+            self._attr_device_class = cfg["device_class"]
+        if "state_class" in cfg:
+            self._attr_state_class = cfg["state_class"]
+        self._attr_native_unit_of_measurement = entity_def.unit_of_measurement
+        super().async_update_def(entity_def)
+
+    @callback
+    def set_derived_value(self, value: float | int | str | bool | date | None) -> None:
+        """Set the computed native value (called by the derived evaluator)."""
+        self._attr_native_value = value
+
+    @override
+    def _restore_from_last_state(self, state: str | None) -> None:
+        """Restore the last computed value from the persisted state."""
+        if state is None:
+            return
+        parsed = _parse_date(state)
+        if parsed is not None:
+            self._attr_native_value = parsed
+            return
+        try:
+            self._attr_native_value = float(state)
+        except ValueError:
+            self._attr_native_value = state
+
+
 def _parse_date(value: Any) -> date | None:
     """Parse a YYYY-MM-DD string into a date."""
     if value is None or value == "":
@@ -382,6 +440,7 @@ ENTITY_CLASS_MAP: dict[str, type[AssetEntityMixin]] = {
     "select": AssetSelectEntity,
     "button": AssetButtonEntity,
     "switch": AssetSwitchEntity,
+    "derived": AssetDerivedEntity,
 }
 
 
@@ -403,13 +462,17 @@ def entity_slug(entity_def: EntityDef) -> str:
 
 
 def platform_for_kind(kind: str) -> str:
-    """Return the HA platform name for an entity kind."""
-    return kind
+    """Return the HA platform name for an entity kind.
+
+    `derived` entities are exposed on the `sensor` platform.
+    """
+    return "sensor" if kind == "derived" else kind
 
 
 __all__ = [
     "AssetButtonEntity",
     "AssetDateEntity",
+    "AssetDerivedEntity",
     "AssetEntityMixin",
     "AssetNumberEntity",
     "AssetSelectEntity",

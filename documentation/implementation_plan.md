@@ -59,7 +59,7 @@ Result:
   payload when source value is None (voluptuous `str`/`cv.icon` reject
   None even when optional); absence is valid.
 
-## Phase 3 — Derived sensors
+## Phase 3 — Derived sensors ✅ DONE (commit pending)
 Deliverable: automatic `sensor.asset_*` computed from manual entities.
 - `derived.py`: declarative formula evaluator; expressions reference
   other entities by unique_id; runs on `EVENT_STATE_CHANGED`.
@@ -67,6 +67,23 @@ Deliverable: automatic `sensor.asset_*` computed from manual entities.
 - Initial operator set: arithmetic, datediff, now(), comparisons.
 Exit criteria: defining `oil_change_date` + `interval_days` yields a
 `days_until_oil_change` sensor that updates daily.
+
+Result:
+- `formula.py`: pure recursive-descent parser/evaluator (no `eval`, no
+  HA deps). Supports arithmetic, comparisons, boolean, parentheses,
+  string literals, and whitelisted functions (`now`, `datediff`, `days`,
+  `abs`, `min`, `max`, `round`). Date subtraction auto-extracts `.days`.
+- `derived.py`: `coerce_value` (typed sibling resolution) +
+  `DerivedEvaluator` (recomputes on entity-collection changes via the
+  coordinator; daily midnight tick via `async_track_time_change`).
+- `AssetDerivedEntity` in `entity.py` extends `SensorEntity`; derived
+  entities exposed on the `sensor` platform via `platform_for_kind`.
+- `DERIVED_CONFIG_SCHEMA` requires `config.formula`; shared by
+  `ENTITY_CREATE_SCHEMA` and `TEMPLATE_ENTITY_SPEC_SCHEMA`.
+- Vehicle template gained `days_until_oil_change` derived entity (11 total).
+- 32 new tests in `test_derived.py`; 77 total pass; 85% coverage; ruff clean.
+- Deviations: recompute driven by entity-collection listener (not
+  `EVENT_STATE_CHANGED`); None-aware arithmetic; self-reference → None.
 
 ## Phase 4 — Frontend panel
 Deliverable: Settings → Asset Manager UI.

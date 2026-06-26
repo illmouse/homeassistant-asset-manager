@@ -163,7 +163,7 @@ reject None even under `vol.Optional`); absence is valid.
 
 ---
 
-## Phase 3 — Derived sensors  `[ ]`
+## Phase 3 — Derived sensors  `[x]`
 **Deliverable:** automatic `sensor.asset_*` computed from manual entities.
 
 **Plan**
@@ -184,9 +184,39 @@ pytest tests/components/asset_manager/test_derived.py -vv
 #   advance HA clock a day, confirm recompute
 ```
 
-**Result:** _(pending)_
+**Result:** Done. `formula.py` is a pure recursive-descent parser/evaluator
+(no `eval`, no HA deps) supporting arithmetic (`+ - * / %`), comparisons
+(`== != < <= > >=`), boolean (`and or not`), parentheses, string literals,
+and a whitelisted function set (`now`, `datediff`, `days`, `abs`, `min`,
+`max`, `round`). Date subtraction auto-extracts `.days` from timedeltas.
+`derived.py` wraps the evaluator with `coerce_value` (typed sibling
+resolution: ISO dates, int/float strings) and a `DerivedEvaluator` that
+recomputes on entity-collection changes (via the coordinator) and on a
+daily midnight tick (`async_track_time_change`). `AssetDerivedEntity` in
+`entity.py` extends `SensorEntity` with a `set_derived_value` callback;
+derived entities are exposed on the `sensor` platform via
+`platform_for_kind("derived") -> "sensor"`. The coordinator now tracks
+affected assets on entity changes and defers recomputation via
+`async_call_later(0)` so platform adders settle first. `DERIVED_CONFIG_SCHEMA`
+requires `config.formula`; shared by `ENTITY_CREATE_SCHEMA` and
+`TEMPLATE_ENTITY_SPEC_SCHEMA`. Vehicle template gained a
+`days_until_oil_change` derived entity (11 entities total). 32 new tests in
+`test_derived.py` (formula parser unit tests, coerce_value, evaluate_derived,
+integration: registry, recompute on update, datediff, validation, invalid
+formula). 77 pytest tests pass total; 85% coverage; ruff clean.
 
-**Session log:** _(none yet)_
+**Deviations:** (1) Recomputation is driven by the entity-collection change
+listener (coordinator) rather than `EVENT_STATE_CHANGED` — the latter
+requires an unreliable entity_id→EntityDef mapping. (2) Arithmetic with a
+None operand returns None (graceful) rather than raising — this lets
+formulas reference siblings whose value is not yet set. (3) Self-referencing
+a derived sensor resolves to None (the sensor cannot read its own output).
+
+**Session log**
+- 2026-06-26 · Phase 3 commit (pending) · Implemented `formula.py` (pure
+  evaluator), `derived.py` (HA integration + midnight tick),
+  `AssetDerivedEntity`, `platform_for_kind`, coordinator recompute wiring,
+  Vehicle template derived entity, 32 new tests.
 
 ---
 

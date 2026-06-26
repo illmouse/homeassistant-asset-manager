@@ -61,7 +61,7 @@ async def test_seed_builtin_templates_loaded(
     assert len(templates.data) >= 7
     # Vehicle template has 10 entities
     vehicle = templates.data["vehicle"]
-    assert len(vehicle.entities) == 10
+    assert len(vehicle.entities) == 11
 
 
 async def test_seed_builtin_templates_idempotent(
@@ -163,10 +163,10 @@ async def test_apply_template_creates_entities(
     response = await client.receive_json()
     assert response["success"] is True
     result: list[dict[str, Any]] = response["result"]
-    assert len(result) == 10
+    assert len(result) == 11
     entities = _entities_collection(hass)
     car_entities = entities.async_by_asset("car")
-    assert len(car_entities) == 10
+    assert len(car_entities) == 11
     slugs = {e.slug for e in car_entities}
     assert "mileage" in slugs
     assert "fuel_level" in slugs
@@ -197,7 +197,7 @@ async def test_apply_template_idempotent(
     )
     response1 = await client.receive_json()
     assert response1["success"] is True
-    assert len(response1["result"]) == 10
+    assert len(response1["result"]) == 11
     # Second apply — should be idempotent, 0 new entities
     await client.send_json_auto_id(
         {
@@ -211,7 +211,7 @@ async def test_apply_template_idempotent(
     assert len(response2["result"]) == 0
     # Total still 10
     entities = _entities_collection(hass)
-    assert len(entities.async_by_asset("car")) == 10
+    assert len(entities.async_by_asset("car")) == 11
 
 
 async def test_apply_template_unknown_asset(

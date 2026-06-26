@@ -10,9 +10,11 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.collection import CollectionChange
 from homeassistant.helpers.device_registry import DeviceRegistry, async_get
+from homeassistant.helpers.event import async_call_later
 
 from .const import DOMAIN
-from .entity import build_entity
+from .derived import DerivedEvaluator
+from .entity import build_entity, platform_for_kind
 from .models import Asset, EntityDef
 from .storage import AssetStorageCollection, EntityStorageCollection, TemplateStorageCollection
 
@@ -47,9 +49,11 @@ class AssetManagerCoordinator:
         self._entity_adders: dict[str, Any] = hass.data[DOMAIN].setdefault("entity_adders", {})
         self._unsub_assets = assets.async_add_change_set_listener(self._on_asset_changes)
         self._unsub_entities = entities.async_add_change_set_listener(self._on_entity_changes)
+        self.derived = DerivedEvaluator(hass, entities, self._live)
 
     async def async_unload(self) -> None:
         """Detach listeners and remove all devices/entities."""
+        self.derived.stop()
         if self._unsub_assets:
             self._unsub_assets()
             self._unsub_assets = None
@@ -65,8 +69,14 @@ class AssetManagerCoordinator:
         """Register an `async_add_entities` callback for a platform."""
         self._entity_adders[platform] = adder
         for entity_def in self.entities.data.values():
-            if entity_def.kind == platform:
+            if platform_for_kind(entity_def.kind) == platform:
                 self._add_entity(entity_def)
+        self.derived.start()
+
+    @callback
+    def async_recompute_derived(self) -> None:
+        """Recompute all derived entities (call after platforms are ready)."""
+        self.derived.recompute_all()
 
     def _asset_name(self, asset_id: str) -> str:
         """Return the asset's display name, falling back to its id."""
@@ -102,26 +112,45 @@ class AssetManagerCoordinator:
 
     async def _on_entity_changes(self, change_set: list[CollectionChange]) -> None:
         """Reconcile live entities for changed EntityDefs."""
+        affected_assets: set[str] = set()
         for change in change_set:
             item: EntityDef = change.item
             if change.change_type == "added":
                 self._add_entity(item)
+                affected_assets.add(item.asset_id)
             elif change.change_type == "updated":
                 self._update_entity(item)
+                affected_assets.add(item.asset_id)
             elif change.change_type == "removed":
                 await self._remove_entity(item)
+                affected_assets.add(item.asset_id)
+        if affected_assets:
+            self._unsub_recompute = async_call_later(
+                self.hass, 0, self._async_recompute_assets(affected_assets)
+            )
+
+    def _async_recompute_assets(self, asset_ids: set[str]) -> Any:
+        """Return a callback that recomputes derived entities on the given assets."""
+
+        @callback
+        def _recompute(_now: Any) -> None:
+            for asset_id in asset_ids:
+                self.derived.recompute_asset(asset_id)
+
+        return _recompute
 
     def _add_entity(self, entity_def: EntityDef) -> None:
         """Create a live entity and register it with its platform adder."""
-        adder = self._entity_adders.get(entity_def.kind)
+        platform = platform_for_kind(entity_def.kind)
+        adder = self._entity_adders.get(platform)
         if adder is None:
             _LOGGER.debug(
                 "Platform %s not ready yet; will add entity %s on setup",
-                entity_def.kind,
+                platform,
                 entity_def.unique_id,
             )
             return
-        existing = self.ent_reg.async_get_entity_id(entity_def.kind, DOMAIN, entity_def.unique_id)
+        existing = self.ent_reg.async_get_entity_id(platform, DOMAIN, entity_def.unique_id)
         if existing is not None:
             _LOGGER.debug("Entity %s already registered", entity_def.unique_id)
             self._live[entity_def.id] = None
@@ -140,7 +169,7 @@ class AssetManagerCoordinator:
         """Remove a live entity and its registry entry."""
         self._live.pop(entity_def.id, None)
         entity_reg_id = self.ent_reg.async_get_entity_id(
-            entity_def.kind, DOMAIN, entity_def.unique_id
+            platform_for_kind(entity_def.kind), DOMAIN, entity_def.unique_id
         )
         if entity_reg_id is not None:
             self.ent_reg.async_remove(entity_reg_id)

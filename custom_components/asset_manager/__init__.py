@@ -29,6 +29,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data[DATA_COORDINATOR] = coordinator
     async_register_bespoke_commands(hass, coordinator)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await hass.async_block_till_done()
+    coordinator.async_recompute_derived()
     return True
 
 

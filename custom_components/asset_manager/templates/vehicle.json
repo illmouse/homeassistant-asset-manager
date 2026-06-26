@@ -5,6 +5,7 @@
     {"slug": "fuel_level", "name": "Fuel Level", "kind": "number", "config": {"min": 0, "max": 100, "step": 1, "mode": "slider"}, "unit_of_measurement": "%"},
     {"slug": "oil_change_date", "name": "Oil Change Date", "kind": "date"},
     {"slug": "oil_change_interval_days", "name": "Oil Change Interval", "kind": "number", "config": {"min": 1, "max": 2000, "step": 1, "mode": "box"}, "unit_of_measurement": "d"},
+    {"slug": "days_until_oil_change", "name": "Days Until Oil Change", "kind": "derived", "config": {"formula": "datediff(oil_change_date, now())"}, "unit_of_measurement": "d"},
     {"slug": "last_service_date", "name": "Last Service Date", "kind": "date"},
     {"slug": "next_service_date", "name": "Next Service Date", "kind": "date"},
     {"slug": "registration_plate", "name": "Registration Plate", "kind": "text", "config": {"min": 0, "max": 20, "pattern": ""}},
