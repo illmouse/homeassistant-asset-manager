@@ -107,7 +107,7 @@ HA caches Python imports, so most changes require restarting HA:
 
 ## Phase tracker
 - [x] Phase 0 — Scaffold
-- [ ] Phase 1 — Storage + CRUD
+- [x] Phase 1 — Storage + CRUD
 - [ ] Phase 2 — Templates + Clone
 - [ ] Phase 3 — Derived sensors
 - [ ] Phase 4 — Frontend panel

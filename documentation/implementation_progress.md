@@ -45,7 +45,7 @@ test passes. Dev container boots HA.
 
 ---
 
-## Phase 1 — Storage + CRUD primitives  `[ ]`
+## Phase 1 — Storage + CRUD primitives  `[x]`
 **Deliverable:** create/edit/delete assets and entities via WebSocket.
 
 **Plan**
@@ -81,9 +81,28 @@ Manual WS smoke:
 {"type":"asset_manager/entities/update","entity_id":"<id>","value":42000}
 ```
 
-**Result:** _(pending)_
+**Result:** Done. `AssetStorageCollection` + `EntityStorageCollection`
+(subclasses of `helpers.collection.StorageCollection`) persist to
+`.storage/asset_manager/{assets,entities}` and expose
+`{list,create,update,delete,subscribe}` WS commands via
+`StorageCollectionWebsocket`. `AssetManagerCoordinator` subscribes to both
+collections' change-set listeners and reconciles one `DeviceRegistry` entry
+per asset (identified by `(asset_manager, asset_id)`) plus one live entity
+per `EntityDef` across 7 platforms (`number/sensor/date/text/select/button/
+switch`), each platform wired through a platform file
+(`async_setup_entry` registers its `async_add_entities` callback with the
+coordinator). Entity unique IDs follow `{asset_id}-{slug}`; storage ids are
+slugified (`{asset_id}_{slug}`). 33 pytest tests pass (WS CRUD + reconcile +
+per-kind entity creation + service-driven value persistence); 85% coverage.
+Lint clean (ruff 0.15.20); pre-commit passes. HA 2026.7.0b1 boots the
+integration in the devcontainer.
 
-**Session log:** _(none yet)_
+**Session log**
+- 2026-06-26 · Phase 1 commit (pending) · Implemented models/storage/entity/
+  coordinator + 7 platform files + 33 tests. Fixed entity-registry lookup
+  bug (must use `unique_id`, not storage id). Dropped `entity_description`
+  in favour of direct `_attr_*` to avoid platform-specific description
+  fields. Bumped pre-commit ruff pin v0.5.7 → v0.15.20 (py314 support).
 
 ---
 
@@ -196,3 +215,14 @@ ruff check . && ruff format . && pre-commit run --all-files
 _(use for gotchas that span sessions: env quirks, flaky fixtures, HA version
 pins, etc.)_
 - Phase 0 env: devcontainer built, `.venv` present, `hass -c config` boots.
+- HA version pinned to 2026.7.0b1 (Python 3.14). Devcontainer container id
+  at time of Phase 1: `3e42a25eb0e0`. Run tests inside the container:
+  `docker exec 3e42a25eb0e0 bash -lc 'cd /workspaces/homeassistant-asset-manager && source .venv/bin/activate && pytest ...'`.
+- Host `.venv/bin/python` is a broken symlink (points to /usr/local/bin/python
+  which only exists inside the container) — do NOT run pytest/ruff on the host.
+- Pre-commit ruff pin bumped v0.5.7 → v0.15.20 so `target-version = "py314"`
+  parses; re-run `pre-commit install` inside the container after fresh clone.
+- Entity storage id is slugified (`car_mileage`); entity-registry unique_id
+  keeps the hyphen (`car-mileage`). WS delete sends the storage id.
+- `fail_on_log_exception` is autouse in phcc — any unhandled callback error
+  fails the test. Coordinator/entity code must be exception-clean.
