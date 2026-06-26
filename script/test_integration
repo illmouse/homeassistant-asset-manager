@@ -1,0 +1,76 @@
+#!/usr/bin/env python
+"""Test the Asset Manager config flow against a running HA instance.
+
+Uses the REST API (config flow is HTTP, not WebSocket in HA).
+Requires HASS_TOKEN env var.
+"""
+import asyncio
+import os
+
+import aiohttp
+
+HA_URL = "http://localhost:8123"
+TOKEN = os.environ["HASS_TOKEN"]
+HEADERS = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
+
+
+async def main() -> None:
+    async with aiohttp.ClientSession(headers=HEADERS) as session:
+        # 1. Init config flow
+        async with session.post(
+            f"{HA_URL}/api/config/config_entries/flow",
+            json={"handler": "asset_manager"},
+        ) as resp:
+            print(f"[flow init] HTTP {resp.status}")
+            data = await resp.json()
+            print(f"  type={data.get('type')} step={data.get('step_id')}")
+            assert resp.status == 200
+            assert data["type"] == "form"
+            assert data["step_id"] == "user"
+            flow_id = data["flow_id"]
+
+        # 2. Submit empty form
+        async with session.post(
+            f"{HA_URL}/api/config/config_entries/flow/{flow_id}",
+            json={},
+        ) as resp:
+            print(f"[flow submit] HTTP {resp.status}")
+            data = await resp.json()
+            print(f"  type={data.get('type')} title={data.get('title')}")
+            assert resp.status == 200
+            assert data["type"] == "create_entry"
+            assert data["title"] == "Asset Manager"
+
+        # Wait for setup
+        await asyncio.sleep(1)
+
+        # 3. List config entries via WS (need WS for this)
+        async with session.ws_connect(f"{HA_URL}/api/websocket") as ws:
+            await ws.receive_json()  # auth_required
+            await ws.send_json({"type": "auth", "access_token": TOKEN})
+            auth = await ws.receive_json()
+            assert auth["type"] == "auth_ok"
+            await ws.send_json({"id": 1, "type": "config_entries/entry/get"})
+            resp_data = await ws.receive_json()
+            am = [e for e in resp_data["result"] if e["domain"] == "asset_manager"]
+            print(f"[entries] {len(am)} asset_manager entry/entries")
+            for e in am:
+                print(f"  id={e['entry_id']} title={e['title']} state={e['state']}")
+            assert len(am) == 1
+            assert am[0]["state"] == "loaded"
+
+        # 4. Try adding a second instance (should abort)
+        async with session.post(
+            f"{HA_URL}/api/config/config_entries/flow",
+            json={"handler": "asset_manager"},
+        ) as resp:
+            data = await resp.json()
+            print(f"[second flow] type={data.get('type')} reason={data.get('reason')}")
+            assert data["type"] == "abort"
+            assert data["reason"] == "single_instance_allowed"
+
+        print("\nPASS: Asset Manager integration works end-to-end in HA!")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

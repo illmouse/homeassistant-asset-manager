@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Home Assistant dev instance state
+config/.storage/
+config/home-assistant.log*
+config/deps/
+config/tts/
+config/clouds/
+
+.secrets

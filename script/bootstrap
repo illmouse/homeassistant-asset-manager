@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Runs on each container start: activate venv, verify symlink, export env
+# for subsequent shells.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+VENV="$ROOT/.venv"
+if [ -d "$VENV" ]; then
+    source "$VENV/bin/activate"
+fi
+
+mkdir -p config/custom_components
+ln -sfn ../../custom_components/asset_manager config/custom_components/asset_manager
+
+# Persist env so every new shell in the container picks up the venv.
+ENV_FILE="$HOME/.bashrc.d/asset-manager-venv.sh"
+mkdir -p "$(dirname "$ENV_FILE")"
+cat > "$ENV_FILE" <<EOF
+export VIRTUAL_ENV="$VENV"
+export PATH="$VENV/bin:\$PATH"
+unset PYTHONHOME
+EOF
+
+echo ">> Environment ready. Start HA with: hass -c config"
