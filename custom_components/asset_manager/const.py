@@ -7,6 +7,7 @@ SAVE_DELAY = 10
 
 ASSET_STORAGE_KEY = f"{DOMAIN}/assets"
 ENTITY_STORAGE_KEY = f"{DOMAIN}/entities"
+TEMPLATE_STORAGE_KEY = f"{DOMAIN}/templates"
 
 PLATFORMS: tuple[str, ...] = (
     "number",

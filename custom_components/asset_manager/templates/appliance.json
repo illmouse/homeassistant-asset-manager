@@ -1,0 +1,14 @@
+{
+  "name": "Appliance",
+  "icon": "mdi:fridge",
+  "entities": [
+    {"slug": "power_consumption", "name": "Power Consumption", "kind": "sensor", "config": {"device_class": "power", "state_class": "measurement"}, "unit_of_measurement": "W", "value": 0},
+    {"slug": "energy_usage", "name": "Energy Usage", "kind": "sensor", "config": {"device_class": "energy", "state_class": "total_increasing"}, "unit_of_measurement": "kWh"},
+    {"slug": "target_temperature", "name": "Target Temperature", "kind": "number", "config": {"min": -20, "max": 30, "step": 1, "mode": "box"}, "unit_of_measurement": "°C"},
+    {"slug": "current_temperature", "name": "Current Temperature", "kind": "sensor", "config": {"device_class": "temperature", "state_class": "measurement"}, "unit_of_measurement": "°C"},
+    {"slug": "purchase_date", "name": "Purchase Date", "kind": "date"},
+    {"slug": "warranty_expiry", "name": "Warranty Expiry", "kind": "date"},
+    {"slug": "status", "name": "Status", "kind": "select", "config": {"options": ["Idle", "Running", "Standby", "Error"]}},
+    {"slug": "power_on", "name": "Power On", "kind": "switch", "value": false}
+  ]
+}

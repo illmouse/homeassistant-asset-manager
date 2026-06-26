@@ -1,0 +1,14 @@
+{
+  "name": "Coffee Machine",
+  "icon": "mdi:coffee",
+  "entities": [
+    {"slug": "water_level", "name": "Water Level", "kind": "number", "config": {"min": 0, "max": 100, "step": 1, "mode": "slider"}, "unit_of_measurement": "%"},
+    {"slug": "bean_level", "name": "Bean Level", "kind": "number", "config": {"min": 0, "max": 100, "step": 1, "mode": "slider"}, "unit_of_measurement": "%"},
+    {"slug": "brew_count", "name": "Brew Count", "kind": "number", "config": {"min": 0, "max": 99999, "step": 1, "mode": "box"}},
+    {"slug": "last_descale_date", "name": "Last Descale Date", "kind": "date"},
+    {"slug": "coffee_ready", "name": "Coffee Ready", "kind": "switch", "value": false},
+    {"slug": "brew_strength", "name": "Brew Strength", "kind": "select", "config": {"options": ["Mild", "Medium", "Strong", "Extra Strong"]}},
+    {"slug": "descaling_needed", "name": "Descaling Needed", "kind": "switch", "value": false},
+    {"slug": "start_brew", "name": "Start Brew", "kind": "button"}
+  ]
+}

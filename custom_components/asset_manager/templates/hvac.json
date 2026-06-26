@@ -1,0 +1,12 @@
+{
+  "name": "HVAC",
+  "icon": "mdi:hvac",
+  "entities": [
+    {"slug": "temperature", "name": "Temperature", "kind": "number", "config": {"min": 10, "max": 35, "step": 0.5, "mode": "slider"}, "unit_of_measurement": "°C"},
+    {"slug": "humidity", "name": "Humidity", "kind": "sensor", "config": {"device_class": "humidity", "state_class": "measurement"}, "unit_of_measurement": "%", "value": 45},
+    {"slug": "mode", "name": "Mode", "kind": "select", "config": {"options": ["Off", "Cool", "Heat", "Auto", "Fan Only"]}, "value": "Off"},
+    {"slug": "fan_speed", "name": "Fan Speed", "kind": "select", "config": {"options": ["Low", "Medium", "High", "Auto"]}, "value": "Auto"},
+    {"slug": "filter_last_changed", "name": "Filter Last Changed", "kind": "date"},
+    {"slug": "running", "name": "Running", "kind": "switch", "value": false}
+  ]
+}

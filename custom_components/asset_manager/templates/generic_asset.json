@@ -1,0 +1,9 @@
+{
+  "name": "Generic Asset",
+  "entities": [
+    {"slug": "notes", "name": "Notes", "kind": "text", "config": {"min": 0, "max": 1000, "pattern": ""}},
+    {"slug": "status", "name": "Status", "kind": "select", "config": {"options": ["Active", "Inactive", "Maintenance", "Retired"]}},
+    {"slug": "purchase_price", "name": "Purchase Price", "kind": "number", "config": {"min": 0, "max": 999999, "step": 0.01, "mode": "box"}},
+    {"slug": "active", "name": "Active", "kind": "switch", "value": true}
+  ]
+}

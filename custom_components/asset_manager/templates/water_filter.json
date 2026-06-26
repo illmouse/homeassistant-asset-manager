@@ -1,0 +1,12 @@
+{
+  "name": "Water Filter",
+  "icon": "mdi:water",
+  "entities": [
+    {"slug": "total_volume_filtered", "name": "Total Volume Filtered", "kind": "number", "config": {"min": 0, "max": 10000, "step": 1, "mode": "box"}, "unit_of_measurement": "L"},
+    {"slug": "filter_life_remaining", "name": "Filter Life Remaining", "kind": "number", "config": {"min": 0, "max": 100, "step": 1, "mode": "slider"}, "unit_of_measurement": "%"},
+    {"slug": "installation_date", "name": "Installation Date", "kind": "date"},
+    {"slug": "replace_by_date", "name": "Replace By Date", "kind": "date"},
+    {"slug": "flow_rate", "name": "Flow Rate", "kind": "sensor", "config": {"device_class": "flow_rate", "state_class": "measurement"}, "unit_of_measurement": "L/min"},
+    {"slug": "bypass_active", "name": "Bypass Active", "kind": "switch", "value": false}
+  ]
+}

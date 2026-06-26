@@ -14,7 +14,7 @@ from homeassistant.helpers.device_registry import DeviceRegistry, async_get
 from .const import DOMAIN
 from .entity import build_entity
 from .models import Asset, EntityDef
-from .storage import AssetStorageCollection, EntityStorageCollection
+from .storage import AssetStorageCollection, EntityStorageCollection, TemplateStorageCollection
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,12 +33,14 @@ class AssetManagerCoordinator:
         entry: ConfigEntry,
         assets: AssetStorageCollection,
         entities: EntityStorageCollection,
+        templates: TemplateStorageCollection,
     ) -> None:
         """Initialise the coordinator."""
         self.hass = hass
         self.entry = entry
         self.assets = assets
         self.entities = entities
+        self.templates = templates
         self.dev_reg: DeviceRegistry = async_get(hass)
         self.ent_reg = er.async_get(hass)
         self._live: dict[str, Any] = {}

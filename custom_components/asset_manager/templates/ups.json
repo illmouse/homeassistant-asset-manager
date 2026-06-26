@@ -1,0 +1,13 @@
+{
+  "name": "UPS",
+  "icon": "mdi:power-plug",
+  "entities": [
+    {"slug": "battery_level", "name": "Battery Level", "kind": "number", "config": {"min": 0, "max": 100, "step": 1, "mode": "slider"}, "unit_of_measurement": "%"},
+    {"slug": "battery_voltage", "name": "Battery Voltage", "kind": "sensor", "config": {"device_class": "voltage", "state_class": "measurement"}, "unit_of_measurement": "V"},
+    {"slug": "load_percentage", "name": "Load Percentage", "kind": "number", "config": {"min": 0, "max": 100, "step": 1, "mode": "box"}, "unit_of_measurement": "%"},
+    {"slug": "input_voltage", "name": "Input Voltage", "kind": "sensor", "config": {"device_class": "voltage", "state_class": "measurement"}, "unit_of_measurement": "V"},
+    {"slug": "estimated_runtime", "name": "Estimated Runtime", "kind": "number", "config": {"min": 0, "max": 999, "step": 1, "mode": "box"}, "unit_of_measurement": "min"},
+    {"slug": "last_battery_replace", "name": "Last Battery Replace", "kind": "date"},
+    {"slug": "on_battery", "name": "On Battery", "kind": "switch", "value": false}
+  ]
+}

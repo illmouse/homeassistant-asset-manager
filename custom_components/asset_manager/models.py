@@ -24,6 +24,7 @@ CONF_KIND = "kind"
 CONF_ENABLED = "enabled"
 CONF_CONFIG = "config"
 CONF_VALUE = "value"
+CONF_ENTITIES = "entities"
 
 KIND_NUMBER = "number"
 KIND_SENSOR = "sensor"
@@ -153,6 +154,62 @@ def _validate_entity_fields(data: dict[str, Any]) -> dict[str, Any]:
 
 ENTITY_CREATE_SCHEMA = vol.Schema(vol.All(ENTITY_CREATE_FIELDS, _validate_entity_fields))
 ENTITY_UPDATE_SCHEMA = vol.Schema(ENTITY_UPDATE_FIELDS)
+
+# Template entity spec — same as ENTITY_CREATE_FIELDS but without asset_id
+TEMPLATE_ENTITY_SPEC_FIELDS: dict[Any, Any] = {
+    vol.Required(CONF_SLUG): vol.All(str, vol.Length(min=1)),
+    vol.Required(CONF_NAME): vol.All(str, vol.Length(min=1)),
+    vol.Required(CONF_KIND): vol.In(ENTITY_KINDS),
+    vol.Optional(CONF_ENABLED, default=True): bool,
+    vol.Optional(CONF_CONFIG, default={}): dict,
+    vol.Optional(CONF_VALUE): vol.Any(int, float, str, bool, None),
+    vol.Optional(CONF_ICON): cv.icon,
+    vol.Optional(CONF_UNIT_OF_MEASUREMENT): str,
+}
+
+TEMPLATE_ENTITY_SPEC_SCHEMA = vol.Schema(
+    vol.All(TEMPLATE_ENTITY_SPEC_FIELDS, _validate_entity_fields)
+)
+
+TEMPLATE_CREATE_FIELDS: dict[Any, Any] = {
+    vol.Required(CONF_NAME): vol.All(str, vol.Length(min=1)),
+    vol.Optional(CONF_ICON): cv.icon,
+    vol.Required(CONF_ENTITIES): vol.All(
+        cv.ensure_list, [TEMPLATE_ENTITY_SPEC_SCHEMA], vol.Length(min=1)
+    ),
+}
+
+TEMPLATE_UPDATE_FIELDS: dict[Any, Any] = {
+    vol.Optional(CONF_NAME): vol.All(str, vol.Length(min=1)),
+    vol.Optional(CONF_ICON): vol.Any(cv.icon, None),
+    vol.Optional(CONF_ENTITIES): vol.All(
+        cv.ensure_list, [TEMPLATE_ENTITY_SPEC_SCHEMA], vol.Length(min=1)
+    ),
+}
+
+TEMPLATE_CREATE_SCHEMA = vol.Schema(TEMPLATE_CREATE_FIELDS)
+TEMPLATE_UPDATE_SCHEMA = vol.Schema(TEMPLATE_UPDATE_FIELDS)
+
+
+@dataclass(slots=True)
+class Template:
+    """A reusable template blueprint with entity specs."""
+
+    id: str
+    name: str
+    entities: list[dict[str, Any]] = field(default_factory=list)
+    icon: str | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return JSON-serialisable representation including id."""
+        result: dict[str, Any] = {
+            CONF_ID: self.id,
+            CONF_NAME: self.name,
+            CONF_ENTITIES: list(self.entities),
+        }
+        if self.icon is not None:
+            result[CONF_ICON] = self.icon
+        return result
 
 
 @dataclass(slots=True)
