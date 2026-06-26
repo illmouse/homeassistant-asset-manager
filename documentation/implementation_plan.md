@@ -59,7 +59,7 @@ Result:
   payload when source value is None (voluptuous `str`/`cv.icon` reject
   None even when optional); absence is valid.
 
-## Phase 3 — Derived sensors ✅ DONE (commit pending)
+## Phase 3 — Derived sensors ✅ DONE (commit `8418cbd`)
 Deliverable: automatic `sensor.asset_*` computed from manual entities.
 - `derived.py`: declarative formula evaluator; expressions reference
   other entities by unique_id; runs on `EVENT_STATE_CHANGED`.

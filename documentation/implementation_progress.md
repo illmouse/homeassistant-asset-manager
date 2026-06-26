@@ -213,7 +213,7 @@ formulas reference siblings whose value is not yet set. (3) Self-referencing
 a derived sensor resolves to None (the sensor cannot read its own output).
 
 **Session log**
-- 2026-06-26 · Phase 3 commit (pending) · Implemented `formula.py` (pure
+- 2026-06-26 · `8418cbd` · Implemented `formula.py` (pure
   evaluator), `derived.py` (HA integration + midnight tick),
   `AssetDerivedEntity`, `platform_for_kind`, coordinator recompute wiring,
   Vehicle template derived entity, 32 new tests.
