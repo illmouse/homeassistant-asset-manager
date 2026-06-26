@@ -41,6 +41,8 @@ custom_components/asset_manager/   # the integration (ships to HA)
   coordinator.py
   entity.py
   derived.py
+  panel.py
+  frontend/asset-manager-panel.js
 tests/components/asset_manager/    # pytest (mirrors HA core layout)
 documentation/                     # architecture + plans
 .devcontainer/                    # local HA dev environment
@@ -129,5 +131,5 @@ HA caches Python imports, so most changes require restarting HA:
 - [x] Phase 1 — Storage + CRUD
 - [x] Phase 2 — Templates + Clone
 - [x] Phase 3 — Derived sensors
-- [ ] Phase 4 — Frontend panel
+- [x] Phase 4 — Frontend panel
 - [ ] Phase 5 — Polish & release

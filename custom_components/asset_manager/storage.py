@@ -234,7 +234,9 @@ class TemplateStorageCollection(collection.StorageCollection):
         return self._base_data_to_save()
 
 
-async def async_seed_builtin_templates(templates: TemplateStorageCollection) -> None:
+async def async_seed_builtin_templates(
+    hass: HomeAssistant, templates: TemplateStorageCollection
+) -> None:
     """Seed bundled JSON presets if their ids are not already present."""
     for template_id in BUILTIN_TEMPLATE_IDS:
         if template_id in templates.data:
@@ -243,10 +245,15 @@ async def async_seed_builtin_templates(templates: TemplateStorageCollection) -> 
         if not json_path.exists():
             _LOGGER.warning("Builtin template %s not found at %s", template_id, json_path)
             continue
-        with open(json_path) as f:
-            payload = json.load(f)
+        payload = await hass.async_add_executor_job(_load_json, json_path)
         created = await templates.async_create_item(payload)
         _LOGGER.debug("Seeded builtin template %s (id=%s)", created.name, created.id)
+
+
+def _load_json(path: Path) -> dict[str, Any]:
+    """Read a JSON file off the event loop."""
+    with open(path) as f:
+        return json.load(f)
 
 
 async def async_load_collections(
@@ -296,5 +303,5 @@ async def async_load_collections(
     await asset_collection.async_load()
     await entity_collection.async_load()
     await template_collection.async_load()
-    await async_seed_builtin_templates(template_collection)
+    await async_seed_builtin_templates(hass, template_collection)
     return asset_collection, entity_collection, template_collection

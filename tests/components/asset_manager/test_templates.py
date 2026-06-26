@@ -73,7 +73,7 @@ async def test_seed_builtin_templates_idempotent(
     vehicle = templates.data["vehicle"]
     orig_len = len(vehicle.entities)
     # Call seed again
-    await async_seed_builtin_templates(templates)
+    await async_seed_builtin_templates(hass, templates)
     assert templates.data["vehicle"].entities == vehicle.entities
     assert len(templates.data["vehicle"].entities) == orig_len
 

@@ -10,6 +10,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import DATA_COORDINATOR, DOMAIN, PLATFORMS
 from .coordinator import AssetManagerCoordinator
+from .panel import async_register_panel, async_remove_panel
 from .storage import async_load_collections
 from .ws import async_register_bespoke_commands
 
@@ -29,7 +30,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data[DATA_COORDINATOR] = coordinator
     async_register_bespoke_commands(hass, coordinator)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    await hass.async_block_till_done()
+    await async_register_panel(hass, entry)
     coordinator.async_recompute_derived()
     return True
 
@@ -40,6 +41,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator: AssetManagerCoordinator | None = data.get(DATA_COORDINATOR)
     if coordinator is not None:
         await coordinator.async_unload()
+    async_remove_panel(hass)
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         data.pop(DATA_COORDINATOR, None)

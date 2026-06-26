@@ -220,13 +220,13 @@ a derived sensor resolves to None (the sensor cannot read its own output).
 
 ---
 
-## Phase 4 — Frontend panel  `[ ]`
+## Phase 4 — Frontend panel  `[x]`
 **Deliverable:** Settings → Asset Manager UI.
 
 **Plan**
 - `frontend_extra/asset_manager/` panel source (compiled to `frontend/`)
-- Views: AssetList, AssetDetail (Info/Entities/Templates tabs),
-  EntityEditor modal, TemplatePicker dialog, CloneDialog
+- Views: AssetList, AssetDetail (Info/Entities tabs), EntityEditor modal,
+  TemplatePicker dialog, CloneDialog
 - Wired to WS commands; subscribes to collection change events for live
   updates
 
@@ -234,14 +234,56 @@ a derived sensor resolves to None (the sensor cannot read its own output).
 
 **Testing instructions**
 ```bash
-# build panel per frontend_extra/asset_manager instructions (tbd)
-hass -c config
-# manual: Settings → Asset Manager → add asset → add entities → save → verify device page
+source .venv/bin/activate
+pytest tests/components/asset_manager/test_panel.py -vv
+# manual: hass -c config → Settings sidebar → Asset Manager →
+#   add asset → apply Vehicle template → verify entities on device page
 ```
 
-**Result:** _(pending)_
+**Result:** Done. `panel.py` registers an HTTP static path
+`/api/asset_manager/static` → `custom_components/asset_manager/frontend/`
+and a `custom` built-in panel at sidebar path `asset-manager`
+(`mdi:package-variant`, admin-only, `config_panel_domain=asset_manager`)
+whose `module_url` points at the served `asset-manager-panel.js`.
+`async_setup_entry` calls `async_register_panel` after platform setup;
+`async_unload_entry` calls `async_remove_panel`. Registration is a no-op
+when `hass.http` is None (unit-test path). The panel is a single
+self-contained ES module (`customElements.define("asset-manager-panel")`,
+no Lit/Vite build) using HA's `custom` panel infrastructure (HA injects
+`hass`/`narrow`/`panel` onto the element). Views: AssetList (with Add/
+Clone/Delete), AssetDetail (Info tab: inline-editable name/manufacturer/
+model/serial/icon/tags; Entities tab: list + Add/Edit via EntityEditor
+modal with per-kind JSON config + value), TemplatePicker dialog (lists
+builtin + user templates, applies via `asset_manager/apply_template`),
+CloneDialog. Live updates via `asset_manager/assets/subscribe` +
+`asset_manager/entities/subscribe` collection events. 5 new tests in
+`test_panel.py` (panel registered on setup, removed on unload, static
+path serves the module, frontend dir contains the file, register is
+reload-safe). 82 pytest tests pass total; 85% coverage; ruff clean.
+HA 2026.7.0b1 boots in ~3.6s with the panel served at
+`/api/asset_manager/static/asset-manager-panel.js` (HTTP 200).
 
-**Session log:** _(none yet)_
+**Deviations:** (1) Delivery model changed from `frontend_extra/`
+compiled-to-`frontend/` (HA core's `frontend_extra` compile step is not
+available to custom integrations) to a single self-contained ES module
+served via `hass.http.async_register_static_paths` + HA's bundled
+`custom` panel component — no build toolchain, no node deps. (2)
+Template UI scope is apply-only (TemplatePicker); template CRUD editor
+deferred to Phase 5. (3) Removed `await hass.async_block_till_done()`
+from `async_setup_entry` — it deadlocks during real boot when other
+stage-2 integrations have pending tasks; `async_forward_entry_setups`
+already awaits platform setup. (4) Fixed a pre-existing Phase 2 blocking
+`open()` in `async_seed_builtin_templates` (moved to
+`hass.async_add_executor_job`); `async_seed_builtin_templates` now
+takes `hass` as its first arg.
+
+**Session log**
+- 2026-06-26 · Phase 4 commit (pending) · Added `panel.py`,
+  `frontend/asset-manager-panel.js` (single-file custom panel),
+  `test_panel.py` (5 tests); wired panel register/remove into
+  `__init__.py`; removed deadlocking `async_block_till_done` from
+  `async_setup_entry`; fixed blocking `open()` in
+  `async_seed_builtin_templates`.
 
 ---
 
@@ -287,3 +329,12 @@ pins, etc.)_
   keeps the hyphen (`car-mileage`). WS delete sends the storage id.
 - `fail_on_log_exception` is autouse in phcc — any unhandled callback error
   fails the test. Coordinator/entity code must be exception-clean.
+- Phase 4: tests that exercise panel registration must call
+  `async_setup_component(hass, "http", {"http": {}})` before
+  `async_setup_entry` — the `hass` fixture does not boot `http` by
+  default. `panel.py` no-ops when `hass.http is None` so the rest of the
+  suite is unaffected.
+- Phase 4: never call `await hass.async_block_till_done()` from inside
+  `async_setup_entry` during stage-2 boot — it deadlocks waiting on
+  other integrations' pending tasks. `async_forward_entry_setups`
+  already awaits platform setup.

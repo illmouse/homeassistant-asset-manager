@@ -85,14 +85,36 @@ Result:
 - Deviations: recompute driven by entity-collection listener (not
   `EVENT_STATE_CHANGED`); None-aware arithmetic; self-reference → None.
 
-## Phase 4 — Frontend panel
+## Phase 4 — Frontend panel ✅ DONE (commit pending)
 Deliverable: Settings → Asset Manager UI.
 - `frontend_extra/asset_manager/` panel source (compiled to `frontend/`).
-- Views: AssetList, AssetDetail (Info/Entities/Templates tabs),
+- Views: AssetList, AssetDetail (Info/Entities tabs),
   EntityEditor modal, TemplatePicker dialog, CloneDialog.
 - Wired to WS commands; subscribes to collection change events for
   live updates.
 Exit criteria: end-user can build a car asset from scratch via UI.
+
+Result:
+- `panel.py` serves `custom_components/asset_manager/frontend/` at
+  `/api/asset_manager/static` and registers HA's bundled `custom`
+  panel at sidebar path `asset-manager` (admin-only,
+  `config_panel_domain=asset_manager`, `module_url` →
+  `asset-manager-panel.js`). Register on setup, remove on unload.
+- `frontend/asset-manager-panel.js`: single self-contained ES module
+  (`customElements.define("asset-manager-panel")`, no Lit/Vite build).
+  Views: AssetList (Add/Clone/Delete), AssetDetail (Info tab inline-
+  editable; Entities tab list + Add/Edit modal with per-kind JSON
+  config), TemplatePicker (apply-only), CloneDialog. Live updates via
+  `asset_manager/{assets,entities}/subscribe`.
+- 5 new tests in `test_panel.py`; 82 total pass; 85% coverage; ruff
+  clean. HA 2026.7.0b1 boots in ~3.6s; panel module served HTTP 200.
+- Deviations: `frontend_extra/` compile step unavailable to custom
+  integrations → single-file ES module served via
+  `hass.http.async_register_static_paths` + `custom` panel.
+  Template CRUD editor deferred to Phase 5 (apply-only here). Removed
+  deadlocking `async_block_till_done()` from `async_setup_entry`.
+  Fixed Phase 2 blocking `open()` in `async_seed_builtin_templates`
+  (now `hass.async_add_executor_job`; takes `hass` as 1st arg).
 
 ## Phase 5 — Polish
 - Import/Export (JSON) for templates and asset packs.
