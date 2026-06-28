@@ -106,6 +106,27 @@ blocked.
   passes `node --check`. Note: host can no longer run pytest (HA
   2026.6+ needs Python ≥3.14); use `docker exec homeassistant` per
   `(b3)`.
+- **2026-06-28** — Added labels + icon picker to templates.
+  `Template` dataclass gains a `labels: list[str]` field (persisted in
+  template storage; `as_dict` emits `CONF_LABELS` always). New constants
+  `CONF_LABELS`, `CONF_APPLY_LABELS` in `const.py`.
+  `TEMPLATE_CREATE_FIELDS`/`TEMPLATE_UPDATE_FIELDS` accept `labels`
+  (voluptuous `vol.All(cv.ensure_list, [str])`).
+  `WS_APPLY_TEMPLATE_SCHEMA` gains `apply_labels` (default `True`).
+  `ws_apply_template` merges (union, not replace) template labels onto
+  the asset's device when `apply_labels` is set, and returns
+  `{"created": [...], "applied_labels": [...]}`. Frontend:
+  `templateEditorDialog` uses `buildIconPicker` (was plain `<input>`)
+  for the template icon, adds a per-spec `buildIconPicker` in each
+  entity-spec row, and renders a `buildLabelPicker` for template labels.
+  `templatePickerDialog` shows an "Also apply template labels" checkbox
+  (default checked) and passes `applyLabels` through to `applyTemplate`.
+  `renderTemplatesView` shows `template.icon` next to the name (mirrors
+  asset list). Post-apply, the detail view refreshes `panel._assetLabels`
+  for the target asset from the WS response. 7 new tests in
+  `test_templates.py` (create/update/clear labels, apply merge, apply
+  disabled, no-template-labels, per-spec icon). 97 tests pass on host
+  (HA 2026.2.3, Python 3.13). ruff clean, all JS passes `node --check`.
 
 ---
 

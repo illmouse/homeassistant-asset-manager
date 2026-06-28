@@ -177,7 +177,12 @@ export function renderDetailView(panel) {
       h("button", { class: "am-btn secondary", onClick: () => panel._goList() }, "← Back"),
       h("h2", { class: "am-title am-grow", style: "margin:0" }, asset.name),
       h("button", { class: "am-btn secondary",
-        onClick: () => templatePickerDialog(hass, asset, () => {}) }, "Apply template"),
+        onClick: () => templatePickerDialog(hass, asset, (created, appliedLabels) => {
+          if (appliedLabels && appliedLabels.length) {
+            panel._assetLabels.set(asset.id, appliedLabels);
+          }
+          panel._render();
+        }) }, "Apply template"),
       h("button", { class: "am-btn secondary",
         onClick: () => cloneDialog(hass, asset, () => {}) }, "Clone")),
     h("div", { class: "am-card" }, h("div", { class: "am-tabs" }, ...tabs), body));
