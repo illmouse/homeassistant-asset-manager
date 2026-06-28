@@ -131,24 +131,43 @@ export const STYLES = `
                       padding: 0 2px; line-height: 1; }
   .am-label-chip-x:hover { opacity: .7; }
 
-  /* Label picker (Info tab + create dialog) */
-  .am-label-picker { display: flex; flex-direction: column; gap: 8px; }
-  .am-label-chips { display: flex; gap: 6px; flex-wrap: wrap; min-height: 28px;
-                    align-items: center; }
-  .am-label-controls { position: relative; }
-  .am-label-add { align-self: flex-start; }
+  /* Label picker (Info tab + create dialog) — single multi-select combobox */
+  .am-label-picker { position: relative; }
+  .am-label-combobox { display: flex; flex-wrap: wrap; align-items: center;
+                       gap: 4px; min-height: 36px; padding: 4px 28px 4px 6px;
+                       border: 1px solid var(--divider-color, #ccc);
+                       border-radius: 6px;
+                       background: var(--card-background-color, #fff);
+                       cursor: text; position: relative; }
+  .am-label-combobox:focus-within { border-color: var(--primary-color, #03a9f4); }
+  .am-label-combobox-chips { display: flex; gap: 4px; flex-wrap: wrap;
+                             align-items: center; }
+  .am-label-combobox-text { flex: 1 1 80px; min-width: 80px; border: 0;
+                            background: transparent; outline: none;
+                            color: var(--primary-text-color, #000);
+                            font: inherit; padding: 2px 0; }
+  .am-label-combobox-arrow { position: absolute; right: 8px; top: 50%;
+                              transform: translateY(-50%); font-size: 12px;
+                              color: var(--secondary-text-color, #888);
+                              pointer-events: none; }
   .am-label-dropdown { position: absolute; z-index: 50; top: 100%; left: 0;
-                       margin-top: 4px; min-width: 260px; max-width: 90vw;
+                       right: 0; margin-top: 4px; min-width: 260px;
                        background: var(--card-background-color, #fff);
                        border: 1px solid var(--divider-color, #ccc);
                        border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.2);
                        padding: 8px; }
-  .am-label-search { width: 100%; margin-bottom: 8px; }
   .am-label-options { max-height: 200px; overflow-y: auto; margin-bottom: 8px; }
-  .am-label-option { padding: 6px 8px; cursor: pointer; border-radius: 4px;
-                     border: 1px solid transparent; margin-bottom: 4px;
-                     width: fit-content; }
+  .am-label-option { display: flex; align-items: center; gap: 6px;
+                     padding: 6px 8px; cursor: pointer; border-radius: 4px;
+                     border: 1px solid transparent; margin-bottom: 4px; }
   .am-label-option:hover { background: var(--divider-color, rgba(0,0,0,.06)); }
+  .am-label-option.selected { border-color: var(--primary-color, #03a9f4); }
+  .am-label-check { width: 14px; display: inline-block;
+                    color: var(--primary-color, #03a9f4); font-weight: 700; }
+  .am-label-new-link { display: block; margin: 4px 2px 8px; padding: 0;
+                       background: none; border: 0; cursor: pointer;
+                       color: var(--primary-color, #03a9f4);
+                       font-size: 12px; }
   .am-label-create { margin-top: 8px; padding-top: 8px;
                      border-top: 1px solid var(--divider-color, #eee); }
   .am-label-create .am-field { margin-bottom: 6px; }

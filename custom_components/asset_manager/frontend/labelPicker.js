@@ -1,19 +1,19 @@
 /**
- * Asset Manager — reusable native HA label picker.
+ * Asset Manager — reusable multi-select label combobox.
  *
  * `buildLabelPicker(hass, initialLabelIds, onChange)` returns
- *   { container, get(), set(labelIds) }
+ *   { container, get(), set(labelIds), refreshLabels() }
  * mirroring the {container, get()} shape of buildIconPicker/buildAreaPicker.
  *
- * Renders:
- *   - a row of chips for the currently-assigned labels (each chip colored
- *     per its HA label color, with an × to unassign),
- *   - an "Add label" button that opens a dropdown of all available labels
- *     not yet assigned, plus an inline "New label" form (name + optional
- *     color + icon) that calls the native config/label_registry/create WS.
+ * A single input-like field that shows selected labels as inline chips
+ * (each with an × to remove). Clicking or focusing opens a dropdown of
+ * all labels with a checkbox reflecting selected state; typing filters
+ * by name. A "+ New label…" link at the bottom of the dropdown reveals
+ * an inline create form (name + optional color + icon) that calls the
+ * native config/label_registry/create WS.
  *
  * Labels are assigned at the device level (DeviceEntry.labels), not on
- * entities. The caller is responsible for persisting the selected set via
+ * entities. The caller persists the selected set via
  * `updateAssetLabels(hass, assetId, labelIds)`; this picker only manages
  * the UI state and reports changes through `onChange(labelIds)`.
  */
@@ -23,7 +23,6 @@ import { labelColorToCss } from "./constants.js";
 import { listLabels, createLabel } from "./ws.js";
 import { showToast, withBusy } from "./ui.js";
 
-// Resolve a label's display color to an inline CSS string.
 const chipStyle = (color) => {
   const css = labelColorToCss(color);
   return css ? `border-color:${css}; color:${css};` : "";
@@ -31,37 +30,80 @@ const chipStyle = (color) => {
 
 export function buildLabelPicker(hass, initialLabelIds = [], onChange = null) {
   const labelIds = new Set(initialLabelIds);
-  let allLabels = []; // [{label_id, name, color, icon, ...}]
+  let allLabels = [];
+  let searchTerm = "";
+  let dropdownOpen = false;
+  let createOpen = false;
 
-  const chipsRow = h("div", { class: "am-label-chips" });
-  const dropdownHolder = h("div", {});
-  const addBtn = h("button", { class: "am-btn secondary am-label-add" }, "+ Add label");
+  const labelById = (id) => allLabels.find((l) => l.label_id === id);
 
-  const container = h("div", { class: "am-label-picker" },
-    chipsRow,
-    h("div", { class: "am-label-controls" }, addBtn, dropdownHolder));
+  // --- Combobox input (chips + search text + ▾) ---
+  const searchInput = h("input", {
+    class: "am-label-combobox-text",
+    placeholder: initialLabelIds.length ? "" : "Add labels…",
+    value: "",
+  });
+  const chipsHolder = h("span", { class: "am-label-combobox-chips" });
+  const affordance = h("span", { class: "am-label-combobox-arrow" }, "▾");
+  const combobox = h("div", { class: "am-label-combobox" },
+    chipsHolder,
+    searchInput,
+    affordance);
 
+  // --- Dropdown (options + new-link + create form) ---
+  const optionsList = h("div", { class: "am-label-options" });
+  const newLink = h("button", { type: "button", class: "am-label-new-link" }, "+ New label…");
+
+  const nameInput = h("input", { class: "am-input am-label-create-name", placeholder: "Label name" });
+  const colorSelect = h("select", { class: "am-select am-label-create-color" },
+    h("option", { value: "" }, "Default"),
+    h("option", { value: "red" }, "Red"),
+    h("option", { value: "pink" }, "Pink"),
+    h("option", { value: "purple" }, "Purple"),
+    h("option", { value: "blue" }, "Blue"),
+    h("option", { value: "cyan" }, "Cyan"),
+    h("option", { value: "teal" }, "Teal"),
+    h("option", { value: "green" }, "Green"),
+    h("option", { value: "amber" }, "Amber"),
+    h("option", { value: "orange" }, "Orange"),
+    h("option", { value: "grey" }, "Grey"));
+  const iconInput = h("input", { class: "am-input am-label-create-icon", placeholder: "mdi:tag (optional)" });
+  const createBtn = h("button", { class: "am-btn" }, "Create label");
+  const createErr = h("div", { class: "am-error" });
+  const createForm = h("div", { class: "am-label-create" },
+    h("div", { class: "am-field" }, h("label", {}, "Name"), nameInput),
+    h("div", { style: "display:grid; grid-template-columns:1fr 1fr; gap:6px" },
+      h("div", { class: "am-field" }, h("label", {}, "Color"), colorSelect),
+      h("div", { class: "am-field" }, h("label", {}, "Icon"), iconInput)),
+    createBtn,
+    createErr);
+
+  const dropdown = h("div", { class: "am-label-dropdown" },
+    optionsList,
+    newLink,
+    createForm);
+
+  const container = h("div", { class: "am-label-picker" }, combobox, dropdown);
+
+  // --- State helpers ---
   const get = () => [...labelIds];
+
+  const fire = () => { if (onChange) onChange(get()); };
 
   const set = (ids) => {
     labelIds.clear();
     for (const id of ids) labelIds.add(id);
     renderChips();
-    if (onChange) onChange(get());
+    if (dropdownOpen) renderOptions();
+    fire();
   };
 
-  const labelById = (id) => allLabels.find((l) => l.label_id === id);
-
+  // --- Rendering ---
   const renderChips = () => {
-    clear(chipsRow);
-    if (labelIds.size === 0) {
-      chipsRow.append(h("span", { class: "am-muted" }, "No labels assigned."));
-      return;
-    }
-    // Render in the order of allLabels so chips stay stable.
+    clear(chipsHolder);
     const ordered = allLabels.filter((l) => labelIds.has(l.label_id));
     for (const label of ordered) {
-      const chip = h("span", {
+      chipsHolder.append(h("span", {
         class: "am-label-chip",
         style: chipStyle(label.color),
         title: label.description || "",
@@ -70,146 +112,128 @@ export function buildLabelPicker(hass, initialLabelIds = [], onChange = null) {
         h("span", {}, label.name),
         h("span", {
           class: "am-label-chip-x",
-          title: "Unassign",
+          title: "Remove",
           onClick: (ev) => {
             ev.stopPropagation();
             labelIds.delete(label.label_id);
             renderChips();
-            if (onChange) onChange(get());
+            if (dropdownOpen) renderOptions();
+            fire();
           },
-        }, "×"));
-      chipsRow.append(chip);
+        }, "×")));
+    }
+    searchInput.placeholder = labelIds.size ? "" : "Add labels…";
+  };
+
+  const renderOptions = () => {
+    clear(optionsList);
+    const q = searchTerm.trim().toLowerCase();
+    const matching = allLabels.filter(
+      (l) => !q || l.name.toLowerCase().includes(q),
+    );
+    if (matching.length === 0) {
+      optionsList.append(h("p", { class: "am-muted", style: "margin:0 0 6px" },
+        q ? "No matching labels." : "No labels yet. Create one below."));
+      return;
+    }
+    for (const label of matching) {
+      const selected = labelIds.has(label.label_id);
+      optionsList.append(h("div", {
+        class: `am-label-option${selected ? " selected" : ""}`,
+        style: chipStyle(label.color),
+        onClick: () => {
+          if (selected) labelIds.delete(label.label_id);
+          else labelIds.add(label.label_id);
+          renderChips();
+          renderOptions();
+          fire();
+        },
+      },
+        h("span", { class: "am-label-check" }, selected ? "✓" : ""),
+        label.icon ? h("ha-icon", { icon: label.icon, style: "margin-right:4px" }) : null,
+        h("span", {}, label.name)));
     }
   };
 
-  let searchTerm = "";
-
-  const renderDropdown = () => {
-    clear(dropdownHolder);
-    const inner = h("div", { class: "am-label-dropdown" });
-
-    // Search input — filters available labels by name.
-    const searchInput = h("input", {
-      class: "am-input am-label-search",
-      placeholder: "Search labels…",
-      value: searchTerm,
-    });
-    searchInput.addEventListener("input", () => {
-      searchTerm = searchInput.value;
-      renderOptions();
-    });
-
-    // Scrollable options list.
-    const optionsList = h("div", { class: "am-label-options" });
-    const renderOptions = () => {
-      clear(optionsList);
-      const q = searchTerm.trim().toLowerCase();
-      const available = allLabels.filter(
-        (l) => !labelIds.has(l.label_id)
-          && (!q || l.name.toLowerCase().includes(q)),
-      );
-      if (available.length === 0) {
-        optionsList.append(h("p", { class: "am-muted", style: "margin:0 0 6px" },
-          q ? "No matching labels." : "No more labels. Create one below."));
-      } else {
-        for (const label of available) {
-          optionsList.append(h("div", {
-            class: "am-label-option",
-            style: chipStyle(label.color),
-            onClick: () => {
-              labelIds.add(label.label_id);
-              renderChips();
-              renderDropdown();
-              if (onChange) onChange(get());
-            },
-          },
-            label.icon ? h("ha-icon", { icon: label.icon, style: "margin-right:4px" }) : null,
-            label.name));
-        }
-      }
-    };
-    renderOptions();
-
-    // Inline create-label form.
-    const nameInput = h("input", { class: "am-input am-label-create-name", placeholder: "New label name" });
-    const colorSelect = h("select", { class: "am-select am-label-create-color" },
-      h("option", { value: "" }, "Default color"),
-      h("option", { value: "red" }, "Red"),
-      h("option", { value: "pink" }, "Pink"),
-      h("option", { value: "purple" }, "Purple"),
-      h("option", { value: "blue" }, "Blue"),
-      h("option", { value: "cyan" }, "Cyan"),
-      h("option", { value: "teal" }, "Teal"),
-      h("option", { value: "green" }, "Green"),
-      h("option", { value: "amber" }, "Amber"),
-      h("option", { value: "orange" }, "Orange"),
-      h("option", { value: "grey" }, "Grey"));
-    const iconInput = h("input", { class: "am-input am-label-create-icon", placeholder: "mdi:tag (optional)" });
-    const createBtn = h("button", { class: "am-btn" }, "Create label");
-    const createErr = h("div", { class: "am-error" });
-    createBtn.addEventListener("click", async () => {
-      const name = nameInput.value.trim();
-      if (!name) { nameInput.focus(); return; }
-      createErr.textContent = "";
-      try {
-        await withBusy(createBtn, async () => {
-          const payload = { name };
-          if (colorSelect.value) payload.color = colorSelect.value;
-          if (iconInput.value.trim()) payload.icon = iconInput.value.trim();
-          await createLabel(hass, payload);
-          await refreshLabels();
-          const created = allLabels.find((l) => l.name === name);
-          if (created) {
-            labelIds.add(created.label_id);
-            renderChips();
-            renderDropdown();
-            if (onChange) onChange(get());
-          }
-          showToast(`Created label “${name}”`, "success", 2000);
-        });
-      } catch (e) { createErr.textContent = String(e.message || e); }
-    });
-
-    inner.append(
-      searchInput,
-      optionsList,
-      h("div", { class: "am-label-create" },
-        h("div", { class: "am-field" }, h("label", {}, "New label"), nameInput),
-        h("div", { style: "display:grid; grid-template-columns:1fr 1fr; gap:6px" },
-          h("div", { class: "am-field" }, h("label", {}, "Color"), colorSelect),
-          h("div", { class: "am-field" }, h("label", {}, "Icon"), iconInput)),
-        createBtn,
-        createErr));
-
-    dropdownHolder.append(inner);
-    searchInput.focus();
+  const renderCreateVisibility = () => {
+    createForm.style.display = createOpen ? "" : "none";
+    newLink.style.display = createOpen ? "none" : "";
   };
 
-  let dropdownOpen = false;
-  addBtn.addEventListener("click", (ev) => {
+  // --- Dropdown open/close ---
+  const openDropdown = () => {
+    if (dropdownOpen) return;
+    dropdownOpen = true;
+    dropdown.style.display = "";
+    createOpen = false;
+    renderCreateVisibility();
+    renderOptions();
+  };
+  const closeDropdown = () => {
+    if (!dropdownOpen) return;
+    dropdownOpen = false;
+    createOpen = false;
+    dropdown.style.display = "none";
+    searchTerm = "";
+    searchInput.value = "";
+    renderCreateVisibility();
+  };
+
+  // --- Events ---
+  searchInput.addEventListener("focus", openDropdown);
+  searchInput.addEventListener("input", () => {
+    searchTerm = searchInput.value;
+    if (!dropdownOpen) openDropdown();
+    renderOptions();
+  });
+  combobox.addEventListener("click", (ev) => {
+    if (ev.target === affordance || ev.target === combobox) {
+      searchInput.focus();
+    }
+  });
+  newLink.addEventListener("click", (ev) => {
     ev.stopPropagation();
-    dropdownOpen = !dropdownOpen;
-    if (dropdownOpen) {
-      renderDropdown();
-      // Close on outside click.
-      setTimeout(() => {
-        const onDoc = (e) => {
-          if (!e.composedPath().includes(container)) {
-            dropdownOpen = false;
-            clear(dropdownHolder);
-            document.removeEventListener("click", onDoc);
-          }
-        };
-        document.addEventListener("click", onDoc);
-      }, 0);
-    } else {
-      clear(dropdownHolder);
+    createOpen = true;
+    renderCreateVisibility();
+    nameInput.focus();
+  });
+  createBtn.addEventListener("click", async () => {
+    const name = nameInput.value.trim();
+    if (!name) { nameInput.focus(); return; }
+    createErr.textContent = "";
+    try {
+      await withBusy(createBtn, async () => {
+        const payload = { name };
+        if (colorSelect.value) payload.color = colorSelect.value;
+        if (iconInput.value.trim()) payload.icon = iconInput.value.trim();
+        await createLabel(hass, payload);
+        await refreshLabels();
+        const created = allLabels.find((l) => l.name === name);
+        if (created) {
+          labelIds.add(created.label_id);
+          renderChips();
+          renderOptions();
+          fire();
+        }
+        showToast(`Created label “${name}”`, "success", 2000);
+        createOpen = false;
+        nameInput.value = "";
+        colorSelect.value = "";
+        iconInput.value = "";
+        renderCreateVisibility();
+        searchInput.focus();
+      });
+    } catch (e) { createErr.textContent = String(e.message || e); }
+  });
+
+  // Outside click closes dropdown + collapses create form.
+  document.addEventListener("click", (ev) => {
+    if (dropdownOpen && !ev.composedPath().includes(container)) {
+      closeDropdown();
     }
   });
 
-  // Load the full label list once, then re-render. Callers that need
-  // to refresh after external changes (e.g. label_registry_updated) can
-  // call refreshLabels() again.
+  // --- Load + refresh ---
   let refreshLabels;
   const load = () => {
     refreshLabels = async () => {
@@ -218,11 +242,15 @@ export function buildLabelPicker(hass, initialLabelIds = [], onChange = null) {
           a.name.localeCompare(b.name));
       } catch { allLabels = []; }
       renderChips();
-      if (dropdownOpen) renderDropdown();
+      if (dropdownOpen) renderOptions();
     };
     return refreshLabels();
   };
   load();
+
+  // Start with dropdown hidden.
+  dropdown.style.display = "none";
+  renderCreateVisibility();
 
   return { container, get, set, refreshLabels: () => load() };
 }
