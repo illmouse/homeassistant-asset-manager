@@ -661,3 +661,141 @@ async def test_switch_entity_persists_state_via_service(
     )
     await hass.async_block_till_done()
     assert entities.data["car_heater"].value is True
+
+
+async def test_create_asset_rejects_tags_field(
+    hass: HomeAssistant, enable_custom_integrations: None
+) -> None:
+    """Tags were dropped; passing tags now raises a voluptuous error."""
+    await _setup_integration(hass, enable_custom_integrations)
+    assets = _assets_collection(hass)
+    with pytest.raises(vol.Invalid):
+        await assets.async_create_item({"name": "Car", "tags": ["vehicle"]})
+
+
+async def test_asset_has_no_tags_attribute(
+    hass: HomeAssistant, enable_custom_integrations: None
+) -> None:
+    """The Asset dataclass no longer has a tags field."""
+    await _setup_integration(hass, enable_custom_integrations)
+    assets = _assets_collection(hass)
+    created = await assets.async_create_item({"name": "Car"})
+    assert not hasattr(created, "tags")
+    assert "tags" not in created.as_dict()
+
+
+async def test_ws_update_asset_labels(
+    hass: HomeAssistant,
+    enable_custom_integrations: None,
+    hass_ws_client,
+) -> None:
+    """The asset_manager/update_asset_labels WS command assigns device labels."""
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import label_registry as lr
+
+    await _setup_integration(hass, enable_custom_integrations)
+    await _assets_collection(hass).async_create_item({"name": "Car"})
+    await hass.async_block_till_done()
+
+    label_reg = lr.async_get(hass)
+    label = label_reg.async_create("Vehicle")
+    dev_reg = dr.async_get(hass)
+    device = dev_reg.async_get_device({(DOMAIN, "car")})
+    assert device is not None
+    assert device.labels == set()
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {
+            "type": "asset_manager/update_asset_labels",
+            "asset_id": "car",
+            "labels": [label.label_id],
+        }
+    )
+    response = await client.receive_json()
+    assert response["success"] is True
+    assert response["result"]["labels"] == [label.label_id]
+    device = dev_reg.async_get_device({(DOMAIN, "car")})
+    assert device is not None
+    assert label.label_id in device.labels
+
+    # Clearing labels with an empty list is supported.
+    await client.send_json_auto_id(
+        {"type": "asset_manager/update_asset_labels", "asset_id": "car", "labels": []}
+    )
+    response = await client.receive_json()
+    assert response["success"] is True
+    device = dev_reg.async_get_device({(DOMAIN, "car")})
+    assert device is not None
+    assert device.labels == set()
+
+
+async def test_ws_get_asset_labels(
+    hass: HomeAssistant,
+    enable_custom_integrations: None,
+    hass_ws_client,
+) -> None:
+    """The asset_manager/get_asset_labels WS command returns asset→labels map."""
+    from homeassistant.helpers import label_registry as lr
+
+    await _setup_integration(hass, enable_custom_integrations)
+    await _assets_collection(hass).async_create_item({"name": "Car"})
+    await hass.async_block_till_done()
+
+    label_reg = lr.async_get(hass)
+    label = label_reg.async_create("Vehicle")
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {
+            "type": "asset_manager/update_asset_labels",
+            "asset_id": "car",
+            "labels": [label.label_id],
+        }
+    )
+    await client.receive_json()
+
+    await client.send_json_auto_id({"type": "asset_manager/get_asset_labels"})
+    response = await client.receive_json()
+    assert response["success"] is True
+    assert response["result"]["asset_labels"]["car"] == [label.label_id]
+
+
+async def test_clone_copies_source_device_labels(
+    hass: HomeAssistant,
+    enable_custom_integrations: None,
+    hass_ws_client,
+) -> None:
+    """Cloning an asset copies the source device's labels to the new device."""
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import label_registry as lr
+
+    await _setup_integration(hass, enable_custom_integrations)
+    await _assets_collection(hass).async_create_item({"name": "Car"})
+    await hass.async_block_till_done()
+
+    label_reg = lr.async_get(hass)
+    label = label_reg.async_create("Vehicle")
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {
+            "type": "asset_manager/update_asset_labels",
+            "asset_id": "car",
+            "labels": [label.label_id],
+        }
+    )
+    await client.receive_json()
+
+    await client.send_json_auto_id(
+        {"type": "asset_manager/clone_asset", "source_asset_id": "car", "name": "Truck"}
+    )
+    response = await client.receive_json()
+    assert response["success"] is True
+    new_id = response["result"]["asset_id"]
+    await hass.async_block_till_done()
+
+    dev_reg = dr.async_get(hass)
+    new_device = dev_reg.async_get_device({(DOMAIN, new_id)})
+    assert new_device is not None
+    assert label.label_id in new_device.labels

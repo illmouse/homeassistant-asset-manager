@@ -8,9 +8,10 @@ import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import config_validation as cv
 from homeassistant.util import slugify
 
-from .const import DOMAIN
+from .const import CONF_APPLY_LABELS, DOMAIN
 from .coordinator import AssetManagerCoordinator
 
 WS_APPLY_TEMPLATE_SCHEMA = websocket_api.BASE_COMMAND_MESSAGE_SCHEMA.extend(
@@ -18,6 +19,7 @@ WS_APPLY_TEMPLATE_SCHEMA = websocket_api.BASE_COMMAND_MESSAGE_SCHEMA.extend(
         vol.Required("type"): "asset_manager/apply_template",
         vol.Required("asset_id"): str,
         vol.Required("template_id"): str,
+        vol.Optional(CONF_APPLY_LABELS, default=True): bool,
     }
 )
 
@@ -40,6 +42,20 @@ WS_UPDATE_AREA_SCHEMA = websocket_api.BASE_COMMAND_MESSAGE_SCHEMA.extend(
         vol.Required("type"): "asset_manager/update_area",
         vol.Required("asset_id"): str,
         vol.Required("area_id"): vol.Any(str, None),
+    }
+)
+
+WS_GET_ASSET_LABELS_SCHEMA = websocket_api.BASE_COMMAND_MESSAGE_SCHEMA.extend(
+    {
+        vol.Required("type"): "asset_manager/get_asset_labels",
+    }
+)
+
+WS_UPDATE_ASSET_LABELS_SCHEMA = websocket_api.BASE_COMMAND_MESSAGE_SCHEMA.extend(
+    {
+        vol.Required("type"): "asset_manager/update_asset_labels",
+        vol.Required("asset_id"): str,
+        vol.Required("labels"): vol.All(cv.ensure_list, [str]),
     }
 )
 
@@ -73,6 +89,18 @@ def async_register_bespoke_commands(
         websocket_api.async_response(ws_update_area),
         WS_UPDATE_AREA_SCHEMA,
     )
+    websocket_api.async_register_command(
+        hass,
+        "asset_manager/get_asset_labels",
+        websocket_api.async_response(ws_get_asset_labels),
+        WS_GET_ASSET_LABELS_SCHEMA,
+    )
+    websocket_api.async_register_command(
+        hass,
+        "asset_manager/update_asset_labels",
+        websocket_api.async_response(ws_update_asset_labels),
+        WS_UPDATE_ASSET_LABELS_SCHEMA,
+    )
 
 
 async def ws_apply_template(
@@ -82,6 +110,7 @@ async def ws_apply_template(
     coordinator: AssetManagerCoordinator = hass.data[DOMAIN]["coordinator"]
     asset_id: str = msg["asset_id"]
     template_id: str = msg["template_id"]
+    apply_labels: bool = msg.get(CONF_APPLY_LABELS, True)
 
     if asset_id not in coordinator.assets.data:
         connection.send_error(msg["id"], "asset_manager/not_found", f"Asset {asset_id} not found")
@@ -108,7 +137,16 @@ async def ws_apply_template(
         entity = await coordinator.entities.async_create_item(payload)
         created.append(entity.as_dict())
 
-    connection.send_result(msg["id"], created)
+    applied_labels: list[str] = []
+    if apply_labels and template.labels:
+        device = coordinator.dev_reg.async_get_device({(DOMAIN, asset_id)})
+        if device is not None:
+            merged = sorted(set(template.labels) | set(device.labels))
+            if merged != sorted(device.labels):
+                coordinator.dev_reg.async_update_device(device.id, labels=set(merged))
+            applied_labels = merged
+
+    connection.send_result(msg["id"], {"created": created, "applied_labels": applied_labels})
 
 
 async def ws_clone_asset(
@@ -128,15 +166,23 @@ async def ws_clone_asset(
         )
         return
 
-    new_asset_payload: dict[str, Any] = {
-        "name": name,
-        "manufacturer": source.manufacturer,
-        "model": source.model,
-        "tags": list(source.tags or []),
-    }
+    new_asset_payload: dict[str, Any] = {"name": name}
+    if source.manufacturer is not None:
+        new_asset_payload["manufacturer"] = source.manufacturer
+    if source.model is not None:
+        new_asset_payload["model"] = source.model
     if source.icon is not None:
         new_asset_payload["icon"] = source.icon
     new_asset = await coordinator.assets.async_create_item(new_asset_payload)
+
+    # Inherit the source asset's native HA labels (assigned to its device).
+    source_device = coordinator.dev_reg.async_get_device({(DOMAIN, source_asset_id)})
+    if source_device is not None and source_device.labels:
+        new_device = coordinator.dev_reg.async_get_device({(DOMAIN, new_asset.id)})
+        if new_device is not None:
+            coordinator.dev_reg.async_update_device(
+                new_device.id, labels=set(source_device.labels)
+            )
 
     created_entities: list[dict[str, Any]] = []
     for entity_def in coordinator.entities.async_by_asset(source_asset_id):
@@ -195,3 +241,38 @@ async def ws_update_area(
 
     coordinator.dev_reg.async_update_device(device.id, area_id=area_id)
     connection.send_result(msg["id"], {"asset_id": asset_id, "area_id": area_id})
+
+
+async def ws_get_asset_labels(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return the current label_ids for each asset device."""
+    coordinator: AssetManagerCoordinator = hass.data[DOMAIN]["coordinator"]
+    asset_labels: dict[str, list[str]] = {}
+    for asset_id in coordinator.assets.data:
+        device = coordinator.dev_reg.async_get_device({(DOMAIN, asset_id)})
+        asset_labels[asset_id] = sorted(device.labels) if device else []
+    connection.send_result(msg["id"], {"asset_labels": asset_labels})
+
+
+async def ws_update_asset_labels(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Assign native HA labels to an asset's device (full replace)."""
+    coordinator: AssetManagerCoordinator = hass.data[DOMAIN]["coordinator"]
+    asset_id: str = msg["asset_id"]
+    labels: list[str] = msg["labels"]
+
+    if asset_id not in coordinator.assets.data:
+        connection.send_error(msg["id"], "asset_manager/not_found", f"Asset {asset_id} not found")
+        return
+
+    device = coordinator.dev_reg.async_get_device({(DOMAIN, asset_id)})
+    if device is None:
+        connection.send_error(
+            msg["id"], "asset_manager/no_device", f"Device for asset {asset_id} not found"
+        )
+        return
+
+    coordinator.dev_reg.async_update_device(device.id, labels=set(labels))
+    connection.send_result(msg["id"], {"asset_id": asset_id, "labels": sorted(labels)})

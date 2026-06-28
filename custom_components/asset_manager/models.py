@@ -14,10 +14,11 @@ from homeassistant.const import (
 )
 from homeassistant.helpers import config_validation as cv
 
+from .const import CONF_LABELS
+
 CONF_MANUFACTURER = "manufacturer"
 CONF_MODEL = "model"
 CONF_SERIAL = "serial"
-CONF_TAGS = "tags"
 CONF_ASSET_ID = "asset_id"
 CONF_SLUG = "slug"
 CONF_KIND = "kind"
@@ -117,7 +118,6 @@ ASSET_CREATE_FIELDS: dict[Any, Any] = {
     vol.Optional(CONF_MODEL): str,
     vol.Optional(CONF_SERIAL): str,
     vol.Optional(CONF_ICON): cv.icon,
-    vol.Optional(CONF_TAGS): vol.All(cv.ensure_list, [str]),
 }
 
 ASSET_UPDATE_FIELDS: dict[Any, Any] = {
@@ -126,7 +126,6 @@ ASSET_UPDATE_FIELDS: dict[Any, Any] = {
     vol.Optional(CONF_MODEL): vol.Any(str, None),
     vol.Optional(CONF_SERIAL): vol.Any(str, None),
     vol.Optional(CONF_ICON): vol.Any(cv.icon, None),
-    vol.Optional(CONF_TAGS): vol.Any(vol.All(cv.ensure_list, [str]), None),
 }
 
 ASSET_CREATE_SCHEMA = vol.Schema(ASSET_CREATE_FIELDS)
@@ -189,6 +188,7 @@ TEMPLATE_ENTITY_SPEC_SCHEMA = vol.Schema(
 TEMPLATE_CREATE_FIELDS: dict[Any, Any] = {
     vol.Required(CONF_NAME): vol.All(str, vol.Length(min=1)),
     vol.Optional(CONF_ICON): cv.icon,
+    vol.Optional(CONF_LABELS, default=[]): vol.All(cv.ensure_list, [str]),
     vol.Required(CONF_ENTITIES): vol.All(
         cv.ensure_list, [TEMPLATE_ENTITY_SPEC_SCHEMA], vol.Length(min=1)
     ),
@@ -197,6 +197,7 @@ TEMPLATE_CREATE_FIELDS: dict[Any, Any] = {
 TEMPLATE_UPDATE_FIELDS: dict[Any, Any] = {
     vol.Optional(CONF_NAME): vol.All(str, vol.Length(min=1)),
     vol.Optional(CONF_ICON): vol.Any(cv.icon, None),
+    vol.Optional(CONF_LABELS): vol.All(cv.ensure_list, [str]),
     vol.Optional(CONF_ENTITIES): vol.All(
         cv.ensure_list, [TEMPLATE_ENTITY_SPEC_SCHEMA], vol.Length(min=1)
     ),
@@ -214,6 +215,7 @@ class Template:
     name: str
     entities: list[dict[str, Any]] = field(default_factory=list)
     icon: str | None = None
+    labels: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         """Return JSON-serialisable representation including id."""
@@ -221,6 +223,7 @@ class Template:
             CONF_ID: self.id,
             CONF_NAME: self.name,
             CONF_ENTITIES: list(self.entities),
+            CONF_LABELS: list(self.labels),
         }
         if self.icon is not None:
             result[CONF_ICON] = self.icon
@@ -237,7 +240,6 @@ class Asset:
     model: str | None = None
     serial: str | None = None
     icon: str | None = None
-    tags: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         """Return JSON-serialisable representation including id."""
@@ -246,8 +248,6 @@ class Asset:
             value = getattr(self, key)
             if value is not None:
                 result[key] = value
-        if self.tags:
-            result[CONF_TAGS] = list(self.tags)
         return result
 
 

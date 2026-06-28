@@ -15,6 +15,7 @@ from homeassistant.util import slugify
 
 from .const import (
     ASSET_STORAGE_KEY,
+    CONF_LABELS,
     DOMAIN,
     ENTITY_STORAGE_KEY,
     STORAGE_VERSION,
@@ -79,7 +80,6 @@ class AssetStorageCollection(collection.StorageCollection):
             model=merged.get("model", item.model),
             serial=merged.get("serial", item.serial),
             icon=merged.get("icon", item.icon),
-            tags=list(merged.get("tags", item.tags) or []),
         )
 
     @override
@@ -92,7 +92,6 @@ class AssetStorageCollection(collection.StorageCollection):
             model=data.get("model"),
             serial=data.get("serial"),
             icon=data.get("icon"),
-            tags=list(data.get("tags") or []),
         )
 
     @override
@@ -205,6 +204,7 @@ class TemplateStorageCollection(collection.StorageCollection):
             name=merged.get(CONF_NAME, item.name),
             icon=merged.get(CONF_ICON, item.icon),
             entities=list(merged.get(CONF_ENTITIES, item.entities)),
+            labels=list(merged.get(CONF_LABELS, item.labels)),
         )
 
     @override
@@ -215,6 +215,7 @@ class TemplateStorageCollection(collection.StorageCollection):
             name=data[CONF_NAME],
             icon=data.get(CONF_ICON),
             entities=list(data.get(CONF_ENTITIES, [])),
+            labels=list(data.get(CONF_LABELS, [])),
         )
 
     @override

@@ -28,10 +28,12 @@ import {
   applyTemplate,
   cloneAsset,
   updateArea,
+  updateAssetLabels,
 } from "./ws.js";
 import { showToast, openModal, confirmDialog, withBusy } from "./ui.js";
 import { buildConfigFields } from "./config-fields.js";
 import { buildIconPicker, buildAreaPicker } from "./pickers.js";
+import { buildLabelPicker } from "./labelPicker.js";
 
 // Asset creation dialog: name + icon + area + optional template. When a
 // template is selected, create the asset then apply the template in
@@ -41,6 +43,7 @@ export function assetCreateDialog(hass, onCreated) {
   const nameInput = h("input", { class: "am-input", placeholder: "Asset name (e.g. My Car)" });
   const iconPicker = buildIconPicker();
   const areaPicker = buildAreaPicker(hass, null, null);
+  const labelPicker = buildLabelPicker(hass, [], null);
   const templateSelect = h("select", { class: "am-select" },
     h("option", { value: "" }, "Blank asset — no template"));
   const err = h("div", { class: "am-error" });
@@ -54,6 +57,8 @@ export function assetCreateDialog(hass, onCreated) {
       h("label", {}, "Icon"), iconPicker.container),
     h("div", { class: "am-field", style: "margin-bottom:12px" },
       h("label", {}, "Area"), areaPicker.container),
+    h("div", { class: "am-field", style: "margin-bottom:12px" },
+      h("label", {}, "Labels"), labelPicker.container),
     h("div", { class: "am-field", style: "margin-bottom:12px" },
       h("label", {}, "Start from template"), templateSelect),
     err,
@@ -75,6 +80,7 @@ export function assetCreateDialog(hass, onCreated) {
     const templateId = templateSelect.value;
     const icon = iconPicker.get() || undefined;
     const areaId = areaPicker.get();
+    const labelIds = labelPicker.get();
     err.textContent = "";
     try {
       await withBusy(submit, async () => {
@@ -82,19 +88,26 @@ export function assetCreateDialog(hass, onCreated) {
         if (templateId) {
           try { await applyTemplate(hass, asset.id, templateId); }
           catch (e) {
-            showToast(`Asset created, but template failed: ${e.message || e}`, "error", 6000);
+            err.textContent = `Template failed: ${e.message || e}`;
           }
         }
         if (areaId) {
           try { await updateArea(hass, asset.id, areaId); }
           catch (e) {
-            showToast(`Asset created, but area assign failed: ${e.message || e}`, "error", 6000);
+            err.textContent = `Area assign failed: ${e.message || e}`;
           }
         }
+        if (labelIds.length) {
+          try { await updateAssetLabels(hass, asset.id, labelIds); }
+          catch (e) {
+            err.textContent = `Label assign failed: ${e.message || e}`;
+          }
+        }
+        if (err.textContent) return;
         modal.remove();
         onCreated(asset.id);
-        showToast(`Created “${name}”`, "success");
-      });
+        showToast(`Created "${name}"`, "success");
+      }, { errorToast: false });
     } catch (e) { err.textContent = String(e.message || e); }
   });
   nameInput.focus();
@@ -122,21 +135,24 @@ export function cloneDialog(hass, sourceAsset, onDone) {
         await cloneAsset(hass, sourceAsset.id, name);
         modal.remove();
         onDone();
-        showToast(`Cloned “${sourceAsset.name}” → “${name}”`, "success");
-      });
+        showToast(`Cloned "${sourceAsset.name}" → "${name}"`, "success");
+      }, { errorToast: false });
     } catch (e) { err.textContent = String(e.message || e); }
   });
   input.focus();
 }
 
 export function templatePickerDialog(hass, asset, onApplied) {
+  const applyLabelsToggle = h("input", { type: "checkbox", checked: true });
+  const applyLabelsRow = h("label", { style: "display:flex; align-items:center; gap:6px; margin:8px 0; font-size:14px; cursor:pointer" },
+    applyLabelsToggle, "Also apply template labels");
   const err = h("div", { class: "am-error" });
   const list = h("div", {});
   const close = h("button", { class: "am-btn secondary" }, "Close");
   const modal = openModal(h("div", {},
-    h("h3", {}, `Apply template to “${asset.name}”`),
+    h("h3", {}, `Apply template to "${asset.name}"`),
     h("p", { class: "am-muted" }, "Existing entities with the same slug are skipped."),
-    list, err,
+    applyLabelsRow, list, err,
     h("div", { class: "am-modal-actions" }, close)));
   close.addEventListener("click", () => modal.remove());
   list.append(h("p", { class: "am-muted" }, h("span", { class: "am-spinner" }), "Loading templates…"));
@@ -155,11 +171,13 @@ export function templatePickerDialog(hass, asset, onApplied) {
         err.textContent = "";
         try {
           await withBusy(applyBtn, async () => {
-            const created = await applyTemplate(hass, asset.id, t.id);
+            const resp = await applyTemplate(hass, asset.id, t.id, applyLabelsToggle.checked);
+            const created = Array.isArray(resp) ? resp : (resp.created || []);
+            const appliedLabels = Array.isArray(resp) ? [] : (resp.applied_labels || []);
             modal.remove();
-            onApplied(created);
-            showToast(`Applied template “${t.name}” (${created.length} entities added)`, "success");
-          });
+            onApplied(created, appliedLabels);
+            showToast(`Applied template "${t.name}" (${created.length} entities added)`, "success");
+          }, { errorToast: false });
         } catch (e) { err.textContent = String(e.message || e); }
       });
       list.append(row);
@@ -263,7 +281,7 @@ export function entityEditorDialog(hass, asset, entity, onSaved) {
         modal.remove();
         onSaved();
         showToast(isEdit ? "Entity saved" : "Entity created", "success");
-      });
+      }, { errorToast: false });
     } catch (e) { err.textContent = String(e.message || e); }
   });
   if (delBtn) delBtn.addEventListener("click", async () => {
@@ -277,7 +295,7 @@ export function entityEditorDialog(hass, asset, entity, onSaved) {
         modal.remove();
         onSaved();
         showToast("Entity deleted", "success");
-      });
+      }, { errorToast: false });
     } catch (e) { err.textContent = String(e.message || e); }
   });
 }
@@ -288,7 +306,8 @@ export function entityEditorDialog(hass, asset, entity, onSaved) {
 export function templateEditorDialog(hass, template, onSaved) {
   const isEdit = !!template;
   const name = h("input", { class: "am-input", value: template?.name || "", placeholder: "My Template" });
-  const icon = h("input", { class: "am-input", value: template?.icon || "", placeholder: "mdi:car (optional)" });
+  const iconPicker = buildIconPicker(template?.icon || "");
+  const labelPicker = buildLabelPicker(hass, template?.labels || [], null);
   const err = h("div", { class: "am-error" });
   const specs = (template?.entities || []).map((s) => ({ ...s, config: { ...s.config } }));
   const specsList = h("div", {});
@@ -297,6 +316,7 @@ export function templateEditorDialog(hass, template, onSaved) {
     clear(specsList);
     specs.forEach((spec, i) => {
       const cfgFields = buildConfigFields(spec.kind, spec.config);
+      const specIconPicker = buildIconPicker(spec.icon || "");
       const kindSel = h("select", { class: "am-select" },
         ...ENTITY_KINDS.map((k) => h("option", { value: k, selected: spec.kind === k }, k)));
       kindSel.addEventListener("change", () => {
@@ -317,16 +337,18 @@ export function templateEditorDialog(hass, template, onSaved) {
           h("div", {},
             h("span", { style: "font-weight:500" }, spec.name || "(unnamed)"),
             h("span", { class: "am-muted" }, ` · ${spec.slug || "(no slug)"} · ${spec.kind}`)),
-          h("div", { style: "display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-top:6px" },
+          h("div", { style: "display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:6px; margin-top:6px" },
             h("div", { class: "am-field" }, h("label", {}, "Slug"), slugInp),
             h("div", { class: "am-field" }, h("label", {}, "Name"), nameInp),
+            h("div", { class: "am-field" }, h("label", {}, "Icon"), specIconPicker.container),
             h("div", { class: "am-field" }, h("label", {}, "Unit"), unitInp)),
           h("div", { class: "am-field", style: "margin-top:6px" }, h("label", {}, "Kind"), kindSel),
           cfgFields.container),
         h("div", { class: "am-spec-actions" }, rm));
       specsList.append(row);
-      // Stash the config reader so we can collect on submit.
+      // Stash the config reader and icon picker so we can collect on submit.
       spec._read = cfgFields.read;
+      spec._iconPicker = specIconPicker;
     });
   };
   renderSpecs();
@@ -344,7 +366,8 @@ export function templateEditorDialog(hass, template, onSaved) {
     h("h3", {}, isEdit ? `Edit ${template.name}` : "New template"),
     h("div", { class: "am-grid" },
       h("div", { class: "am-field" }, h("label", {}, "Name"), name),
-      h("div", { class: "am-field" }, h("label", {}, "Icon"), icon)),
+      h("div", { class: "am-field" }, h("label", {}, "Icon"), iconPicker.container),
+      h("div", { class: "am-field", style: "grid-column: 1 / -1" }, h("label", {}, "Labels"), labelPicker.container)),
     h("h4", { style: "margin:16px 0 8px" }, "Entity specs"),
     specsList,
     addSpec,
@@ -362,7 +385,8 @@ export function templateEditorDialog(hass, template, onSaved) {
         config: s._read ? s._read() : (s.config || {}),
       };
       if (s.unit_of_measurement) spec.unit_of_measurement = s.unit_of_measurement;
-      if (s.icon) spec.icon = s.icon;
+      const iconVal = s._iconPicker ? s._iconPicker.get() : (s.icon || "");
+      if (iconVal) spec.icon = iconVal;
       if (s.value != null) spec.value = s.value;
       return spec;
     });
@@ -371,7 +395,9 @@ export function templateEditorDialog(hass, template, onSaved) {
       if (!e.slug || !e.name) throw new Error("Each spec needs a slug and name.");
     }
     const payload = { name: name.value.trim(), entities };
-    if (icon.value.trim()) payload.icon = icon.value.trim();
+    const templateIcon = iconPicker.get();
+    if (templateIcon) payload.icon = templateIcon;
+    payload.labels = labelPicker.get();
     return payload;
   };
 
@@ -386,7 +412,7 @@ export function templateEditorDialog(hass, template, onSaved) {
         modal.remove();
         onSaved();
         showToast(isEdit ? "Template saved" : "Template created", "success");
-      });
+      }, { errorToast: false });
     } catch (e) { err.textContent = String(e.message || e); }
   });
   if (delBtn) delBtn.addEventListener("click", async () => {
@@ -400,7 +426,7 @@ export function templateEditorDialog(hass, template, onSaved) {
         modal.remove();
         onSaved();
         showToast("Template deleted", "success");
-      });
+      }, { errorToast: false });
     } catch (e) { err.textContent = String(e.message || e); }
   });
 }

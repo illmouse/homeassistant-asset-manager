@@ -49,7 +49,21 @@ blocked.
   (`views`, `dialogs`, `pickers`, `config-fields`, `ui`, `ws`, `dom`,
   `styles`, `constants`).
 
-### Post-Phase-4 frontend work (uncommitted)
+#### Error UX changes (Error UX - voluptuous errors surfaced in dialogs)
+- Fixed all `withBusy` calls in dialogs to pass `{ errorToast: false }` — errors
+  now show in the dialog's `.am-error` div instead of a redundant toast.
+- `assetCreateDialog`: template/area/label failures set `err.textContent` inline
+  and abort creation early, instead of showing toasts and creating a partial asset.
+- Changed `wsCall` to extract HA WS error `.message` and throw a clean `Error`,
+  so catch blocks never see `[object Object]`.
+- Improved `.am-error` styling (padding, left border, subtle background) for
+  better visibility.
+- Fixed dangling `} catch (e) { ... }` and `});` at lines 182-183 of
+  `dialogs.js` (copy-paste bug from template CRUD editor work that caused a
+  runtime parse error). `node --check` does not catch this in ESM modules —
+  only actual module execution reveals it.
+
+## Post-Phase-4 frontend work (uncommitted)
 - Icon picker: `buildIconPicker` wraps native `<ha-icon-picker>` (works
   in shadow DOM — uses `@property hass`).
 - Area picker: `buildAreaPicker` reverted to plain `<select>` because
@@ -66,15 +80,32 @@ blocked.
 ## MVP close-out  `[~]`
 **Goal:** publishable as a HACS custom integration.
 
-- [ ] Template CRUD editor in UI (backend exists; frontend only)
-- [ ] Error UX — voluptuous errors surfaced in dialogs
+- [x] Template CRUD editor in UI (backend exists; frontend only)
+- [x] Error UX — voluptuous errors surfaced in dialogs
 - [ ] README.md
 - [ ] hacs.json
 - [ ] Backup note in README
 
 **Result:** _(in progress)_
 
-**Session log:** _(none yet)_
+**Session log:**
+- **2026-06-28** — Replaced custom `tags` field with native HA labels.
+  `Asset.tags` removed entirely (models.py, storage.py, voluptuous
+  schemas). Two new bespoke WS commands: `asset_manager/get_asset_labels`
+  (returns `{asset_id: [label_id]}`) and `asset_manager/update_asset_labels`
+  (full-replace device labels). Clone now copies source device's labels
+  to the new device (and fixed pre-existing bug: clone passed `None`
+  for manufacturer/model, which the create schema rejects). New
+  `frontend/labelPicker.js` (chip-based multi-select + inline create
+  via native `config/label_registry/*`). List view label-chip filter
+  replaces tag-chip filter. Create dialog gains a label picker. Panel
+  subscribes to `label_registry_updated` for live refresh. 5 new tests
+  in `test_storage.py` (tags rejection, no-tags attr, get/update labels,
+  clone label copy). All 91 tests pass (HA 2026.7.0b2, Python 3.14, in
+  container — host Python 3.13 cannot run HA). ruff clean, all JS
+  passes `node --check`. Note: host can no longer run pytest (HA
+  2026.6+ needs Python ≥3.14); use `docker exec homeassistant` per
+  `(b3)`.
 
 ---
 

@@ -19,6 +19,8 @@ import {
   templateDelete,
   getAreas,
   updateArea,
+  getAssetLabels,
+  updateAssetLabels,
 } from "./ws.js";
 import { showToast, confirmDialog, withBusy, makeSwitch } from "./ui.js";
 import {
@@ -29,6 +31,7 @@ import {
   templateEditorDialog,
 } from "./dialogs.js";
 import { buildIconPicker, buildAreaPicker } from "./pickers.js";
+import { buildLabelPicker } from "./labelPicker.js";
 
 export const renderEmptyState = (icon, title, body) =>
   h("div", { class: "am-empty" },
@@ -36,7 +39,7 @@ export const renderEmptyState = (icon, title, body) =>
     h("div", { style: "font-weight:500; margin-bottom:4px" }, title),
     h("div", {}, body));
 
-// -- assets list with filter / sort / tag chips --------------------
+// -- assets list with filter / sort / label chips --------------------
 export function renderListView(panel) {
   const hass = panel._hass;
 
@@ -58,43 +61,53 @@ export function renderListView(panel) {
   // the list portion when the filter changes, so the search input keeps
   // focus and the caret position is preserved.
   const search = h("input", { class: "am-input am-search", type: "search",
-    placeholder: "Search by name, manufacturer, model, or tag…", value: panel._search });
+    placeholder: "Search by name, manufacturer, or model…", value: panel._search });
   const sort = h("select", { class: "am-select am-sort" },
     h("option", { value: "name", selected: panel._sort === "name" }, "Sort: Name"),
     h("option", { value: "manufacturer", selected: panel._sort === "manufacturer" }, "Sort: Manufacturer"),
     h("option", { value: "entities", selected: panel._sort === "entities" }, "Sort: Entity count"));
   sort.addEventListener("change", () => { panel._sort = sort.value; refreshList(); });
 
-  // Tag chips derived from all assets' tags.
-  const allTags = [...new Set([...panel._assets.values()]
-    .filter((a) => a && a.tags).flatMap((a) => a.tags))].sort();
-  const tagsRow = h("div", { class: "am-tags" });
-  const renderTags = () => {
-    clear(tagsRow);
-    if (!allTags.length) return;
-    for (const tag of allTags) {
-      const active = panel._activeTag === tag;
+  // Label chips derived from all assets' device labels. We fetch the
+  // asset→labels map async, plus the label registry for display names.
+  const labelsRow = h("div", { class: "am-tags" });
+  const renderLabels = () => {
+    clear(labelsRow);
+    const allLabelIds = [...new Set([...panel._assetLabels.values()]
+      .flatMap((ids) => ids || []))].sort((a, b) => {
+      const na = (panel._labelRegistry.get(a) || {}).name || a;
+      const nb = (panel._labelRegistry.get(b) || {}).name || b;
+      return na.localeCompare(nb);
+    });
+    if (!allLabelIds.length) return;
+    for (const lid of allLabelIds) {
+      const meta = panel._labelRegistry.get(lid) || {};
+      const active = panel._activeLabel === lid;
+      const css = meta.color ? `border-color:var(--label-color-${meta.color}, var(--state-active-color, #03a9f4)); color:var(--label-color-${meta.color}, var(--state-active-color, #03a9f4));` : "";
       const chip = h("span", {
-        class: `am-tag-chip${active ? " active" : ""}`,
-        onClick: () => { panel._activeTag = active ? null : tag; refreshList(); renderTags(); },
-      }, tag);
-      tagsRow.append(chip);
+        class: `am-label-chip${active ? " active" : ""}`,
+        style: active ? "" : css,
+        title: meta.description || "",
+        onClick: () => { panel._activeLabel = active ? null : lid; refreshList(); renderLabels(); },
+      },
+        meta.icon ? h("ha-icon", { icon: meta.icon, style: "margin-right:4px" }) : null,
+        meta.name || lid);
+      labelsRow.append(chip);
     }
   };
-  renderTags();
+  renderLabels();
 
   // List container — rebuilt on filter change, leaving inputs intact.
   const listHolder = h("div", {});
   const refreshList = () => {
     const q = panel._search.trim().toLowerCase();
-    const tag = panel._activeTag;
+    const labelId = panel._activeLabel;
     let items = [...panel._assets.values()].filter((a) => {
-      if (tag && !(a.tags || []).includes(tag)) return false;
+      if (labelId && !((panel._assetLabels.get(a.id) || []).includes(labelId))) return false;
       if (!q) return true;
       return a.name.toLowerCase().includes(q) ||
         (a.manufacturer || "").toLowerCase().includes(q) ||
-        (a.model || "").toLowerCase().includes(q) ||
-        (a.tags || []).some((t) => t.toLowerCase().includes(q));
+        (a.model || "").toLowerCase().includes(q);
     });
     const entityCount = (id) => [...panel._entities.values()].filter((e) => e.asset_id === id).length;
     items.sort((a, b) => {
@@ -105,7 +118,7 @@ export function renderListView(panel) {
     clear(listHolder);
     if (!items.length) {
       listHolder.append(h("p", { class: "am-muted", style: "text-align:center" },
-        tag ? `No assets with tag “${tag}”.` : `No assets match “${panel._search}”.`));
+        labelId ? `No assets with label “${(panel._labelRegistry.get(labelId) || {}).name || labelId}”.` : `No assets match “${panel._search}”.`));
       return;
     }
     for (const asset of items) {
@@ -139,7 +152,7 @@ export function renderListView(panel) {
   });
   refreshList();
 
-  card.append(h("div", { class: "am-filters" }, search, sort), tagsRow, listHolder);
+  card.append(h("div", { class: "am-filters" }, search, sort), labelsRow, listHolder);
   return h("div", { class: `am-root${panel._narrow ? " am-narrow" : ""}` }, header, card);
 }
 
@@ -183,16 +196,6 @@ function renderInfoTab(panel, hass, asset) {
     });
     return h("div", { class: "am-field" }, h("label", {}, label), input);
   };
-  const tagsInput = h("input", { class: "am-input",
-    value: (asset.tags || []).join(", "), placeholder: "comma-separated" });
-  tagsInput.addEventListener("change", async () => {
-    const tags = tagsInput.value.split(",").map((t) => t.trim()).filter(Boolean);
-    try { await withBusy(tagsInput, async () => {
-      await updateAsset(hass, asset.id, { tags }); });
-      showToast("Tags saved", "success", 2000);
-    }
-    catch (e) { showToast(String(e.message || e), "error", 6000); }
-  });
 
   // Icon picker: native ha-icon-picker (searchable dropdown of mdi glyphs).
   // Saves on selection; falls back to a text input if the element is absent.
@@ -223,6 +226,25 @@ function renderInfoTab(panel, hass, asset) {
     areaHolder.append(h("p", { class: "am-muted" }, "Area unavailable."));
   });
 
+  // Label picker: native HA labels assigned to the asset's device.
+  // The current label_ids come from getAssetLabels; changes persist
+  // immediately via updateAssetLabels (full-replace semantics).
+  const labelHolder = h("div", {});
+  getAssetLabels(hass).then(({ asset_labels }) => {
+    const current = asset_labels[asset.id] || [];
+    const labelPicker = buildLabelPicker(hass, current, async (labelIds) => {
+      try { await withBusy(null, async () => {
+        await updateAssetLabels(hass, asset.id, labelIds); });
+        showToast("Labels saved", "success", 2000);
+      } catch (e) { showToast(String(e.message || e), "error", 6000); }
+    });
+    labelHolder.append(labelPicker.container);
+    // Keep the panel's label map in sync so the list view reflects changes.
+    panel._assetLabels.set(asset.id, labelIds);
+  }).catch(() => {
+    labelHolder.append(h("p", { class: "am-muted" }, "Labels unavailable."));
+  });
+
   return h("div", { class: "am-grid" },
     make("name", "Name"),
     make("manufacturer", "Manufacturer"),
@@ -233,7 +255,7 @@ function renderInfoTab(panel, hass, asset) {
     h("div", { class: "am-field" },
       h("label", {}, "Area"), areaHolder),
     h("div", { class: "am-field", style: "grid-column: 1 / -1" },
-      h("label", {}, "Tags"), tagsInput));
+      h("label", {}, "Labels"), labelHolder));
 }
 
 function renderEntitiesTab(panel, hass, asset, entities) {
@@ -379,8 +401,12 @@ export function renderTemplatesView(panel) {
     card.append(renderEmptyState("mdi:file-document-outline", "No templates",
       "Create a template to reuse entity specs across assets."));
   } else for (const t of templates) {
+    const iconEl = t.icon
+      ? h("ha-icon", { icon: t.icon, style: "margin-right:6px;vertical-align:middle" })
+      : null;
     card.append(h("div", { class: "am-row" },
       h("span", { class: "am-grow" },
+        iconEl,
         h("span", { style: "font-weight:500" }, t.name),
         h("span", { class: "am-muted" }, ` · ${t.entities?.length || 0} entities`)),
       h("button", { class: "am-btn secondary",

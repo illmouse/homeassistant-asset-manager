@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import collection as col
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.asset_manager.const import DOMAIN
+from custom_components.asset_manager.const import CONF_LABELS, DOMAIN
 from custom_components.asset_manager.storage import (
     TemplateStorageCollection,
     async_seed_builtin_templates,
@@ -162,7 +162,7 @@ async def test_apply_template_creates_entities(
     )
     response = await client.receive_json()
     assert response["success"] is True
-    result: list[dict[str, Any]] = response["result"]
+    result: list[dict[str, Any]] = response["result"]["created"]
     assert len(result) == 11
     entities = _entities_collection(hass)
     car_entities = entities.async_by_asset("car")
@@ -197,7 +197,7 @@ async def test_apply_template_idempotent(
     )
     response1 = await client.receive_json()
     assert response1["success"] is True
-    assert len(response1["result"]) == 11
+    assert len(response1["result"]["created"]) == 11
     # Second apply — should be idempotent, 0 new entities
     await client.send_json_auto_id(
         {
@@ -208,7 +208,7 @@ async def test_apply_template_idempotent(
     )
     response2 = await client.receive_json()
     assert response2["success"] is True
-    assert len(response2["result"]) == 0
+    assert len(response2["result"]["created"]) == 0
     # Total still 10
     entities = _entities_collection(hass)
     assert len(entities.async_by_asset("car")) == 11
@@ -364,3 +364,268 @@ async def test_template_storage_round_trip(
     await new_collection.async_load()
     assert "persisted" in new_collection.data
     assert new_collection.data["persisted"].name == "Persisted"
+
+
+async def test_template_create_with_labels(
+    hass: HomeAssistant, enable_custom_integrations: None, hass_ws_client
+) -> None:
+    """Creating a template with labels stores and returns them."""
+    await _setup_integration(hass, enable_custom_integrations)
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {
+            "type": "asset_manager/templates/create",
+            "name": "Labeled Template",
+            CONF_LABELS: ["l1", "l2"],
+            "entities": [
+                {
+                    "slug": "sensor_a",
+                    "name": "Sensor A",
+                    "kind": "sensor",
+                }
+            ],
+        }
+    )
+    response = await client.receive_json()
+    assert response["success"] is True
+    result = response["result"]
+    assert result["name"] == "Labeled Template"
+    assert result[CONF_LABELS] == ["l1", "l2"]
+
+    # Verify storage round-trips labels
+    templates = _templates_collection(hass)
+    stored = templates.data[result["id"]]
+    assert stored.labels == ["l1", "l2"]
+
+
+async def test_template_update_labels_replace(
+    hass: HomeAssistant, enable_custom_integrations: None, hass_ws_client
+) -> None:
+    """Updating template labels replaces the set; empty list clears."""
+    await _setup_integration(hass, enable_custom_integrations)
+    templates = _templates_collection(hass)
+    await templates.async_create_item(
+        {
+            "name": "Labeled",
+            CONF_LABELS: ["l1", "l2"],
+            "entities": [
+                {
+                    "slug": "sensor_a",
+                    "name": "Sensor A",
+                    "kind": "sensor",
+                }
+            ],
+        }
+    )
+    client = await hass_ws_client(hass)
+    # Replace labels
+    await client.send_json_auto_id(
+        {
+            "type": "asset_manager/templates/update",
+            "template_id": "labeled",
+            CONF_LABELS: ["l3"],
+        }
+    )
+    response = await client.receive_json()
+    assert response["success"] is True
+    assert response["result"][CONF_LABELS] == ["l3"]
+    stored = templates.data["labeled"]
+    assert stored.labels == ["l3"]
+
+    # Clear labels
+    await client.send_json_auto_id(
+        {
+            "type": "asset_manager/templates/update",
+            "template_id": "labeled",
+            CONF_LABELS: [],
+        }
+    )
+    response = await client.receive_json()
+    assert response["success"] is True
+    assert response["result"][CONF_LABELS] == []
+    stored = templates.data["labeled"]
+    assert stored.labels == []
+
+
+async def test_apply_template_labels_merge(
+    hass: HomeAssistant,
+    enable_custom_integrations: None,
+    hass_ws_client,
+    device_registry,
+) -> None:
+    """Applying a template with labels merges them onto the asset's device."""
+    await _setup_integration(hass, enable_custom_integrations)
+    # Create asset & give it a pre-existing device label
+    assets = _assets_collection(hass)
+    await assets.async_create_item({"name": "Car"})
+    device = device_registry.async_get_device({(DOMAIN, "car")})
+    assert device is not None
+    device_registry.async_update_device(device.id, labels={"existing"})
+    await hass.async_block_till_done()
+
+    # Create template with labels
+    templates = _templates_collection(hass)
+    await templates.async_create_item(
+        {
+            "name": "Labeled",
+            CONF_LABELS: ["l1"],
+            "entities": [
+                {
+                    "slug": "sensor_a",
+                    "name": "Sensor A",
+                    "kind": "sensor",
+                }
+            ],
+        }
+    )
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {
+            "type": "asset_manager/apply_template",
+            "asset_id": "car",
+            "template_id": "labeled",
+        }
+    )
+    response = await client.receive_json()
+    assert response["success"] is True
+    result = response["result"]
+    assert len(result["created"]) == 1
+    assert sorted(result["applied_labels"]) == ["existing", "l1"]
+
+    # Device labels are actually set
+    device = device_registry.async_get_device({(DOMAIN, "car")})
+    assert device is not None
+    assert device.labels == {"existing", "l1"}
+
+
+async def test_apply_template_labels_disabled(
+    hass: HomeAssistant,
+    enable_custom_integrations: None,
+    hass_ws_client,
+    device_registry,
+) -> None:
+    """Setting apply_labels=False preserves existing device labels."""
+    await _setup_integration(hass, enable_custom_integrations)
+    assets = _assets_collection(hass)
+    await assets.async_create_item({"name": "Car"})
+    device = device_registry.async_get_device({(DOMAIN, "car")})
+    assert device is not None
+    device_registry.async_update_device(device.id, labels={"existing"})
+    await hass.async_block_till_done()
+
+    templates = _templates_collection(hass)
+    await templates.async_create_item(
+        {
+            "name": "Labeled",
+            CONF_LABELS: ["l1"],
+            "entities": [
+                {
+                    "slug": "sensor_a",
+                    "name": "Sensor A",
+                    "kind": "sensor",
+                }
+            ],
+        }
+    )
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {
+            "type": "asset_manager/apply_template",
+            "asset_id": "car",
+            "template_id": "labeled",
+            "apply_labels": False,
+        }
+    )
+    response = await client.receive_json()
+    assert response["success"] is True
+    result = response["result"]
+    assert len(result["created"]) == 1
+    assert result["applied_labels"] == []
+
+    # Device labels unchanged
+    device = device_registry.async_get_device({(DOMAIN, "car")})
+    assert device is not None
+    assert device.labels == {"existing"}
+
+
+async def test_apply_template_no_template_labels(
+    hass: HomeAssistant,
+    enable_custom_integrations: None,
+    hass_ws_client,
+    device_registry,
+) -> None:
+    """Applying a template with no labels leaves device labels unchanged."""
+    await _setup_integration(hass, enable_custom_integrations)
+    assets = _assets_collection(hass)
+    await assets.async_create_item({"name": "Car"})
+    device = device_registry.async_get_device({(DOMAIN, "car")})
+    assert device is not None
+    device_registry.async_update_device(device.id, labels={"existing"})
+    await hass.async_block_till_done()
+
+    # Template with no labels (Vehicle builtin has none)
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {
+            "type": "asset_manager/apply_template",
+            "asset_id": "car",
+            "template_id": "vehicle",
+        }
+    )
+    response = await client.receive_json()
+    assert response["success"] is True
+    result = response["result"]
+    assert len(result["created"]) == 11
+    assert result["applied_labels"] == []
+
+    device = device_registry.async_get_device({(DOMAIN, "car")})
+    assert device is not None
+    assert device.labels == {"existing"}
+
+
+async def test_apply_template_spec_icon(
+    hass: HomeAssistant,
+    enable_custom_integrations: None,
+    hass_ws_client,
+) -> None:
+    """A template entity spec with an icon creates an entity with that icon."""
+    await _setup_integration(hass, enable_custom_integrations)
+    assets = _assets_collection(hass)
+    await assets.async_create_item({"name": "Car"})
+
+    templates = _templates_collection(hass)
+    await templates.async_create_item(
+        {
+            "name": "With Icons",
+            "entities": [
+                {
+                    "slug": "engine_temp",
+                    "name": "Engine Temperature",
+                    "kind": "number",
+                    "config": {"min": 0, "max": 300},
+                    "icon": "mdi:thermometer",
+                }
+            ],
+        }
+    )
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {
+            "type": "asset_manager/apply_template",
+            "asset_id": "car",
+            "template_id": "with_icons",
+        }
+    )
+    response = await client.receive_json()
+    assert response["success"] is True
+    result = response["result"]
+    assert len(result["created"]) == 1
+    assert result["created"][0]["icon"] == "mdi:thermometer"
+
+    entities = _entities_collection(hass)
+    entity = entities.data.get("car_engine_temp")
+    assert entity is not None
+    assert entity.icon == "mdi:thermometer"

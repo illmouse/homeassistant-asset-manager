@@ -10,8 +10,15 @@
 
 import { DOMAIN, wsPrefix } from "./constants.js";
 
-export const wsCall = (hass, type, data = {}) =>
-  hass.callWS({ type, ...data });
+export const wsCall = async (hass, type, data = {}) => {
+  try {
+    return await hass.callWS({ type, ...data });
+  } catch (e) {
+    // HA WS errors come as { code, message }. Ensure a clean Error
+    // with just the message so dialog catch blocks get a readable string.
+    throw new Error(e.message || String(e));
+  }
+};
 
 export const wsSubscribe = (hass, type, onEvent) =>
   hass.connection.subscribeMessage(onEvent, { type });
@@ -37,13 +44,29 @@ export const updateEntity = (hass, id, patch) =>
   wsCall(hass, `${wsPrefix("entities")}/update`, { entity_id: id, ...patch });
 export const deleteEntity = (hass, id) =>
   wsCall(hass, `${wsPrefix("entities")}/delete`, { entity_id: id });
-export const applyTemplate = (hass, assetId, templateId) =>
+export const applyTemplate = (hass, assetId, templateId, applyLabels = true) =>
   wsCall(hass, `${DOMAIN}/apply_template`, {
     asset_id: assetId,
     template_id: templateId,
+    apply_labels: applyLabels,
   });
 export const cloneAsset = (hass, sourceId, name) =>
   wsCall(hass, `${DOMAIN}/clone_asset`, { source_asset_id: sourceId, name });
 export const getAreas = (hass) => wsCall(hass, `${DOMAIN}/get_areas`);
 export const updateArea = (hass, assetId, areaId) =>
   wsCall(hass, `${DOMAIN}/update_area`, { asset_id: assetId, area_id: areaId });
+
+// Native HA label registry (admin-only). We reuse HA's own WS commands
+// for label CRUD; assignments go through our bespoke device-label bridge.
+export const listLabels = (hass) => wsCall(hass, "config/label_registry/list");
+export const createLabel = (hass, payload) =>
+  wsCall(hass, "config/label_registry/create", payload);
+export const updateLabel = (hass, labelId, patch) =>
+  wsCall(hass, "config/label_registry/update", { label_id: labelId, ...patch });
+export const deleteLabel = (hass, labelId) =>
+  wsCall(hass, "config/label_registry/delete", { label_id: labelId });
+
+// Bespoke: map asset_id -> device label_ids, and full-replace labels.
+export const getAssetLabels = (hass) => wsCall(hass, `${DOMAIN}/get_asset_labels`);
+export const updateAssetLabels = (hass, assetId, labelIds) =>
+  wsCall(hass, `${DOMAIN}/update_asset_labels`, { asset_id: assetId, labels: labelIds });

@@ -22,6 +22,29 @@ export const ENTITY_KINDS = [
 
 export const wsPrefix = (coll) => `${DOMAIN}/${coll}`;
 
+// HA's 27 named label colors. The label registry accepts either a hex
+// string or one of these names. We map each name to its HA theme CSS
+// variable so chips can render in-label colors without hardcoding hex.
+export const LABEL_COLOR_NAMES = [
+  "primary", "accent", "disabled",
+  "red", "pink", "purple", "deep-purple", "indigo", "blue", "light-blue",
+  "cyan", "teal", "green", "light-green", "lime", "yellow", "amber",
+  "orange", "deep-orange", "brown", "light-grey", "grey", "dark-grey",
+  "blue-grey", "black", "white",
+];
+
+// Map a label color value (named or hex) to a CSS color string usable
+// inline. Named colors resolve to HA's --label-color-<name> variable
+// (HA's label-picker sets these on :root); hex passes through.
+export const labelColorToCss = (color) => {
+  if (!color) return null;
+  if (color.startsWith("#")) return color;
+  if (LABEL_COLOR_NAMES.includes(color)) {
+    return `var(--label-color-${color}, var(--state-active-color, #03a9f4))`;
+  }
+  return color;
+};
+
 // Kinds that accept a unit_of_measurement.
 export const KIND_HAS_UNIT = new Set(["number", "sensor", "derived"]);
 // Kinds that accept an initial value (writable / stateful).

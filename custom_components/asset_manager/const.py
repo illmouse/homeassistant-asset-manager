@@ -19,5 +19,8 @@ PLATFORMS: tuple[str, ...] = (
     "switch",
 )
 
+CONF_LABELS = "labels"
+CONF_APPLY_LABELS = "apply_labels"
+
 DATA_ADDERS = "entity_adders"
 DATA_COORDINATOR = "coordinator"

@@ -93,7 +93,9 @@ export const STYLES = `
   .am-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
   .am-field label { display: block; font-size: 12px; margin-bottom: 4px;
                     color: var(--secondary-text-color, #888); }
-  .am-error { color: var(--error-state-color, #db4437); font-size: 13px; margin-top: 8px; }
+  .am-error { color: var(--error-state-color, #db4437); font-size: 13px; margin-top: 8px;
+              padding: 6px 10px; border-left: 3px solid var(--error-state-color, #db4437);
+              border-radius: 4px; background: rgba(219,68,55,.06); }
   .am-empty { text-align: center; padding: 32px 16px; color: var(--secondary-text-color, #888); }
   .am-empty .am-empty-icon { font-size: 40px; margin-bottom: 8px; opacity: .5; }
   .am-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
@@ -118,11 +120,38 @@ export const STYLES = `
   .am-filters .am-search { flex: 1 1 220px; margin: 0; }
   .am-sort { flex: 0 0 auto; }
   .am-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-  .am-tag-chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; cursor: pointer;
-                 border: 1px solid var(--divider-color, #ccc); color: var(--secondary-text-color, #888);
-                 background: var(--card-background-color, #fff); transition: all .15s ease; }
-  .am-tag-chip.active { background: var(--primary-color, #03a9f4); color: #fff;
-                        border-color: var(--primary-color, #03a9f4); }
+  .am-label-chip { display: inline-flex; align-items: center; gap: 4px;
+                   font-size: 12px; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+                   border: 1px solid var(--divider-color, #ccc);
+                   color: var(--secondary-text-color, #888);
+                   background: var(--card-background-color, #fff); transition: all .15s ease; }
+  .am-label-chip.active { background: var(--primary-color, #03a9f4); color: #fff;
+                          border-color: var(--primary-color, #03a9f4); }
+  .am-label-chip-x { font-weight: 700; margin-left: 4px; cursor: pointer;
+                      padding: 0 2px; line-height: 1; }
+  .am-label-chip-x:hover { opacity: .7; }
+
+  /* Label picker (Info tab + create dialog) */
+  .am-label-picker { display: flex; flex-direction: column; gap: 8px; }
+  .am-label-chips { display: flex; gap: 6px; flex-wrap: wrap; min-height: 28px;
+                    align-items: center; }
+  .am-label-controls { position: relative; }
+  .am-label-add { align-self: flex-start; }
+  .am-label-dropdown { position: absolute; z-index: 50; top: 100%; left: 0;
+                       margin-top: 4px; min-width: 260px; max-width: 90vw;
+                       background: var(--card-background-color, #fff);
+                       border: 1px solid var(--divider-color, #ccc);
+                       border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.2);
+                       padding: 8px; }
+  .am-label-search { width: 100%; margin-bottom: 8px; }
+  .am-label-options { max-height: 200px; overflow-y: auto; margin-bottom: 8px; }
+  .am-label-option { padding: 6px 8px; cursor: pointer; border-radius: 4px;
+                     border: 1px solid transparent; margin-bottom: 4px;
+                     width: fit-content; }
+  .am-label-option:hover { background: var(--divider-color, rgba(0,0,0,.06)); }
+  .am-label-create { margin-top: 8px; padding-top: 8px;
+                     border-top: 1px solid var(--divider-color, #eee); }
+  .am-label-create .am-field { margin-bottom: 6px; }
 
   /* Area picker: a themed <select> + an optional "no area" reset. Reuses
      .am-select so it tracks the theme's input styling. */

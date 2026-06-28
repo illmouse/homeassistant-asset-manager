@@ -25,10 +25,10 @@ Goal: a user can install via HACS, build an asset from scratch, apply
 templates, clone, edit entities, and see derived sensors — all from the
 UI, with sensible errors and a README.
 
-- [ ] **Template CRUD editor in UI** — currently apply-only; add
+- [x] **Template CRUD editor in UI** — currently apply-only; add
   create/edit/delete template dialog. Backend `templates/*` WS CRUD
   already exists (Phase 2 storage); only frontend missing.
-- [ ] **Error UX** — surface voluptuous validation errors in dialogs
+- [x] **Error UX** — surface voluptuous validation errors in dialogs
   (create/update entity, template apply) instead of generic toasts.
   Needs `ws.js` to extract `error.message` from WS error responses and
   dialogs to render an `.am-error` line per field.

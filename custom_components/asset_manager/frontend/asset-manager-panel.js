@@ -14,7 +14,7 @@
  *   - confirmDialog(): Promise-based modal replacing confirm().
  *   - withBusy(): disables the trigger element + reverts on failure.
  *   - Responsive `.am-narrow` layout driven by HA's `narrow` prop.
- *   - Search/sort/tag-chip filter for the asset list (re-renders only
+ *   - Search/sort/label-chip filter for the asset list (re-renders only
  *     the list portion, not the whole panel, so the search input keeps
  *     focus and the caret position is preserved).
  *   - Kind-aware entity editor: the config form section swaps fields
@@ -32,6 +32,9 @@
  *   asset_manager/clone_asset
  *   asset_manager/get_areas
  *   asset_manager/update_area
+ *   asset_manager/get_asset_labels
+ *   asset_manager/update_asset_labels
+ *   config/label_registry/{list,create,update,delete} (native HA)
  *
  * Subscribe events deliver change-set payloads:
  *   [{change_type:"added"|"updated"|"removed", asset_id|entity_id|template_id, item}]
@@ -44,6 +47,8 @@ import {
   assetList,
   entityList,
   templateList,
+  listLabels,
+  getAssetLabels,
   wsSubscribe,
 } from "./ws.js";
 import {
@@ -63,12 +68,14 @@ class AssetManagerPanel extends HTMLElement {
     this._assets = new Map();
     this._entities = new Map();
     this._templates = new Map();
+    this._assetLabels = new Map(); // asset_id -> [label_id]
+    this._labelRegistry = new Map(); // label_id -> label _entry_dict
     this._loaded = false;
     this._view = { name: "list", assetId: null, tab: "info" };
     // ephemeral UI state held outside _view so re-renders don't wipe it
     this._search = "";
     this._sort = "name";
-    this._activeTag = null;
+    this._activeLabel = null;
     this._selectedEntityIds = new Set();
   }
 
@@ -101,11 +108,14 @@ class AssetManagerPanel extends HTMLElement {
     const applyEntities = (items) => apply("entities", items);
     const applyTemplates = (items) => apply("templates", items);
     try {
-      const [assets, entities, templates] = await Promise.all([
-        assetList(hass), entityList(hass), templateList(hass)]);
+      const [assets, entities, templates, labels, assetLabels] = await Promise.all([
+        assetList(hass), entityList(hass), templateList(hass),
+        listLabels(hass), getAssetLabels(hass)]);
       applyAssets(assets);
       applyEntities(entities);
       applyTemplates(templates);
+      this._labelRegistry = new Map(labels.map((l) => [l.label_id, l]));
+      this._assetLabels = new Map(Object.entries(assetLabels.asset_labels));
     } catch (e) {
       this._renderError(e);
       return;
@@ -130,6 +140,16 @@ class AssetManagerPanel extends HTMLElement {
       onEvent("entities", "entity_id")));
     this._subs.push(await wsSubscribe(hass, `${wsPrefix("templates")}/subscribe`,
       onEvent("templates", "template_id")));
+    // Native HA label registry updates (create/update/delete). Refresh
+    // the label registry map and re-render so chips/colors stay current.
+    this._subs.push(await wsSubscribe(hass, "label_registry_updated",
+      async () => {
+        try {
+          const fresh = await listLabels(hass);
+          this._labelRegistry = new Map(fresh.map((l) => [l.label_id, l]));
+        } catch { /* ignore transient errors */ }
+        this._render();
+      }));
   }
 
   _renderError(err) {
