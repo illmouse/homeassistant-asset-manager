@@ -119,6 +119,42 @@ export const STYLES = `
   .am-filters { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
   .am-filters .am-search { flex: 1 1 220px; margin: 0; }
   .am-sort { flex: 0 0 auto; }
+
+  /* Column picker for the asset list table */
+  .am-col-picker { position: relative; flex: 0 0 auto; }
+  .am-col-picker-dropdown { position: absolute; z-index: 50; top: 100%; right: 0;
+                             margin-top: 4px; min-width: 180px;
+                             background: var(--card-background-color, #fff);
+                             border: 1px solid var(--divider-color, #ccc);
+                             border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.2);
+                             padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .am-col-picker-item { display: flex; align-items: center; gap: 6px;
+                        cursor: pointer; font-size: 14px; }
+
+  /* Asset list table */
+  .am-table-scroll { overflow-x: auto; }
+  .am-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .am-table th { text-align: left; padding: 8px 10px; font-weight: 500;
+                 color: var(--secondary-text-color, #888);
+                 border-bottom: 1px solid var(--divider-color, #eee);
+                 white-space: nowrap; }
+  .am-table-sortable { cursor: pointer; user-select: none; }
+  .am-table-sortable:hover { color: var(--primary-color, #03a9f4); }
+  .am-table-icon-th { width: 32px; }
+  .am-table-actions-th { text-align: right; white-space: nowrap; }
+  .am-table td { padding: 8px 10px; border-bottom: 1px solid var(--divider-color, #eee);
+                 vertical-align: middle; }
+  .am-table tbody tr { transition: background-color .1s ease; }
+  .am-table tbody tr:hover { background: var(--divider-color, rgba(0,0,0,.06)); }
+  .am-table tbody tr:last-child td { border-bottom: none; }
+  .am-table-icon-td { text-align: center; white-space: nowrap; }
+  .am-table-name { font-weight: 500; }
+  .am-table-link { cursor: pointer; color: var(--primary-text-color, #000); }
+  .am-table-link:hover { color: var(--primary-color, #03a9f4); }
+  .am-table-actions { text-align: right; white-space: nowrap; }
+  .am-table-actions .am-btn { margin-left: 4px; }
+  .am-table-chips { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  .am-table-chip { font-size: 11px; padding: 2px 8px; }
   .am-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
   .am-label-chip { display: inline-flex; align-items: center; gap: 4px;
                    font-size: 12px; padding: 4px 10px; border-radius: 999px; cursor: pointer;
@@ -215,6 +251,7 @@ export const STYLES = `
   .am-root.am-narrow .am-batch-bar .am-btn { flex: 1 1 auto; }
   .am-root.am-narrow .am-filters { flex-direction: column; align-items: stretch; }
   .am-root.am-narrow .am-sort { width: 100%; }
+  .am-root.am-narrow .am-col-picker { align-self: flex-end; }
 `;
 
 export const injectStyles = () => {

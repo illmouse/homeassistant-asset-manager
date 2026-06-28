@@ -40,6 +40,25 @@ export const renderEmptyState = (icon, title, body) =>
     h("div", {}, body));
 
 // -- assets list with filter / sort / label chips --------------------
+// Column metadata: key -> {label, sortable}. `icon` is a special
+// non-sortable, no-header column. The "Actions" column is appended
+// automatically and not in this map.
+const LIST_COLUMNS = [
+  { key: "icon", label: "", sortable: false },
+  { key: "name", label: "Name", sortable: true },
+  { key: "manufacturer", label: "Manufacturer", sortable: true },
+  { key: "model", label: "Model", sortable: true },
+  { key: "serial", label: "Serial", sortable: true },
+  { key: "area", label: "Area", sortable: true },
+  { key: "entities", label: "Entities", sortable: true },
+  { key: "labels", label: "Labels", sortable: false },
+];
+
+const chipStyle = (color) => {
+  const css = color ? `var(--label-color-${color}, var(--state-active-color, #03a9f4))` : "";
+  return css ? `border-color:${css}; color:${css};` : "";
+};
+
 export function renderListView(panel) {
   const hass = panel._hass;
 
@@ -62,11 +81,52 @@ export function renderListView(panel) {
   // focus and the caret position is preserved.
   const search = h("input", { class: "am-input am-search", type: "search",
     placeholder: "Search by name, manufacturer, or model…", value: panel._search });
+
+  // Column picker: a small dropdown with checkboxes for each column.
+  const colPickerBtn = h("button", { class: "am-btn secondary am-col-picker-btn" }, "⚙ Columns");
+  const colPickerDropdown = h("div", { class: "am-col-picker-dropdown", style: "display:none" });
+  let colPickerOpen = false;
+  for (const col of LIST_COLUMNS) {
+    if (col.key === "icon") continue; // icon is always visible
+    const checked = panel._listColumns.includes(col.key);
+    const cb = h("input", { type: "checkbox", checked: checked ? true : null });
+    cb.addEventListener("change", () => {
+      const next = new Set(panel._listColumns);
+      if (cb.checked) next.add(col.key);
+      else next.delete(col.key);
+      // Always keep name visible.
+      if (!next.has("name")) next.add("name");
+      panel._listColumns = LIST_COLUMNS.map((c) => c.key).filter((k) => next.has(k));
+      // Keep icon first if present.
+      if (!panel._listColumns.includes("icon")) panel._listColumns.unshift("icon");
+      try { localStorage.setItem("am-list-columns", JSON.stringify(panel._listColumns)); } catch {}
+      renderTable();
+    });
+    colPickerDropdown.append(h("label", { class: "am-col-picker-item" },
+      cb, h("span", {}, col.label)));
+  }
+  colPickerBtn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    colPickerOpen = !colPickerOpen;
+    colPickerDropdown.style.display = colPickerOpen ? "" : "none";
+    if (colPickerOpen) {
+      const close = (e) => {
+        if (!e.composedPath().includes(colPickerDropdown) && e.target !== colPickerBtn) {
+          colPickerOpen = false;
+          colPickerDropdown.style.display = "none";
+          document.removeEventListener("click", close);
+        }
+      };
+      setTimeout(() => document.addEventListener("click", close), 0);
+    }
+  });
+  const colPicker = h("div", { class: "am-col-picker" }, colPickerBtn, colPickerDropdown);
+
   const sort = h("select", { class: "am-select am-sort" },
     h("option", { value: "name", selected: panel._sort === "name" }, "Sort: Name"),
     h("option", { value: "manufacturer", selected: panel._sort === "manufacturer" }, "Sort: Manufacturer"),
     h("option", { value: "entities", selected: panel._sort === "entities" }, "Sort: Entity count"));
-  sort.addEventListener("change", () => { panel._sort = sort.value; refreshList(); });
+  sort.addEventListener("change", () => { panel._sort = sort.value; renderTable(); });
 
   // Label chips derived from all assets' device labels. We fetch the
   // asset→labels map async, plus the label registry for display names.
@@ -88,7 +148,7 @@ export function renderListView(panel) {
         class: `am-label-chip${active ? " active" : ""}`,
         style: active ? "" : css,
         title: meta.description || "",
-        onClick: () => { panel._activeLabel = active ? null : lid; refreshList(); renderLabels(); },
+        onClick: () => { panel._activeLabel = active ? null : lid; renderTable(); renderLabels(); },
       },
         meta.icon ? h("ha-icon", { icon: meta.icon, style: "margin-right:4px" }) : null,
         meta.name || lid);
@@ -97,9 +157,9 @@ export function renderListView(panel) {
   };
   renderLabels();
 
-  // List container — rebuilt on filter change, leaving inputs intact.
-  const listHolder = h("div", {});
-  const refreshList = () => {
+  // Table container — rebuilt on filter change, leaving inputs intact.
+  const tableHolder = h("div", { class: "am-table-scroll" });
+  const renderTable = () => {
     const q = panel._search.trim().toLowerCase();
     const labelId = panel._activeLabel;
     let items = [...panel._assets.values()].filter((a) => {
@@ -112,27 +172,82 @@ export function renderListView(panel) {
     const entityCount = (id) => [...panel._entities.values()].filter((e) => e.asset_id === id).length;
     items.sort((a, b) => {
       if (panel._sort === "manufacturer") return (a.manufacturer || "").localeCompare(b.manufacturer || "");
+      if (panel._sort === "model") return (a.model || "").localeCompare(b.model || "");
+      if (panel._sort === "serial") return (a.serial || "").localeCompare(b.serial || "");
+      if (panel._sort === "area") {
+        const an = panel._areaName(a.id);
+        const bn = panel._areaName(b.id);
+        return an.localeCompare(bn);
+      }
       if (panel._sort === "entities") return entityCount(b.id) - entityCount(a.id);
       return a.name.localeCompare(b.name);
     });
-    clear(listHolder);
+    clear(tableHolder);
     if (!items.length) {
-      listHolder.append(h("p", { class: "am-muted", style: "text-align:center" },
+      tableHolder.append(h("p", { class: "am-muted", style: "text-align:center" },
         labelId ? `No assets with label “${(panel._labelRegistry.get(labelId) || {}).name || labelId}”.` : `No assets match “${panel._search}”.`));
       return;
     }
-    for (const asset of items) {
+
+    const visibleCols = panel._listColumns;
+    const thead = h("tr", {},
+      ...visibleCols.map((key) => {
+        const col = LIST_COLUMNS.find((c) => c.key === key);
+        if (!col || key === "icon") return h("th", { class: "am-table-icon-th" }, "");
+        const sortIndicator = panel._sort === key ? " ▾" : "";
+        return col.sortable
+          ? h("th", { class: "am-table-sortable",
+              onClick: () => { panel._sort = key; sort.value = key; renderTable(); } },
+              col.label + sortIndicator)
+          : h("th", {}, col.label);
+      }),
+      h("th", { class: "am-table-actions-th" }, "Actions"));
+
+    const tbodyRows = items.map((asset) => {
       const ents = entityCount(asset.id);
-      const iconEl = asset.icon
-        ? h("ha-icon", { icon: asset.icon, style: "margin-right:6px;vertical-align:middle" })
-        : null;
-      listHolder.append(h("div", { class: "am-row" },
-        h("span", { class: "am-grow", style: "cursor:pointer;font-weight:500",
-                    onClick: () => panel._goDetail(asset.id) },
-          iconEl,
-          `${asset.name} `,
-          h("span", { class: "am-muted", style: "font-weight:normal" },
-            `· ${ents} entit${ents === 1 ? "y" : "ies"}`)),
+      const cells = visibleCols.map((key) => {
+        switch (key) {
+          case "icon":
+            return h("td", { class: "am-table-icon-td" },
+              asset.icon ? h("ha-icon", { icon: asset.icon }) : null);
+          case "name":
+            return h("td", { class: "am-table-name" },
+              h("span", { class: "am-table-link",
+                          onClick: () => panel._goDetail(asset.id) },
+                asset.name));
+          case "manufacturer":
+            return h("td", {}, asset.manufacturer || "");
+          case "model":
+            return h("td", {}, asset.model || "");
+          case "serial":
+            return h("td", {}, asset.serial || "");
+          case "area": {
+            const name = panel._areaName(asset.id);
+            return h("td", {}, name);
+          }
+          case "entities":
+            return h("td", {}, String(ents));
+          case "labels": {
+            const ids = panel._assetLabels.get(asset.id) || [];
+            if (!ids.length) return h("td", {});
+            const shown = ids.slice(0, 3);
+            const extra = ids.length - shown.length;
+            const chips = shown.map((lid) => {
+              const meta = panel._labelRegistry.get(lid) || {};
+              return h("span", {
+                class: "am-label-chip am-table-chip",
+                style: chipStyle(meta.color),
+                title: meta.description || "",
+              }, meta.name || lid);
+            });
+            if (extra > 0) chips.push(h("span", { class: "am-muted" }, `+${extra}`));
+            return h("td", { class: "am-table-chips" }, ...chips);
+          }
+          default:
+            return h("td", {}, "");
+        }
+      });
+      cells.push(h("td", { class: "am-table-actions" },
         h("button", { class: "am-btn secondary",
           onClick: () => cloneDialog(hass, asset, () => {}) }, "Clone"),
         h("button", { class: "am-btn danger", onClick: async () => {
@@ -143,16 +258,21 @@ export function renderListView(panel) {
             showToast(`Deleted “${asset.name}”`, "success"); }
           catch (e) { showToast(String(e.message || e), "error", 6000); }
         }}, "Delete")));
-    }
+      return h("tr", {}, ...cells);
+    });
+
+    tableHolder.append(h("table", { class: "am-table" },
+      h("thead", {}, thead),
+      h("tbody", {}, ...tbodyRows)));
   };
 
   search.addEventListener("input", () => {
     panel._search = search.value;
-    refreshList();
+    renderTable();
   });
-  refreshList();
+  renderTable();
 
-  card.append(h("div", { class: "am-filters" }, search, sort), labelsRow, listHolder);
+  card.append(h("div", { class: "am-filters" }, search, sort, colPicker), labelsRow, tableHolder);
   return h("div", { class: `am-root${panel._narrow ? " am-narrow" : ""}` }, header, card);
 }
 
@@ -190,10 +310,12 @@ export function renderDetailView(panel) {
 
 function renderInfoTab(panel, hass, asset) {
   const make = (field, label, type = "text") => {
-    const input = h("input", { class: "am-input",
+    const input = h("input", {
+      class: "am-input",
+      "data-field": `asset-${field}`,
       value: asset[field] == null ? "" : asset[field], type });
     input.addEventListener("change", async () => {
-      try { await withBusy(input, async () => {
+      try { await withBusy(null, async () => {
         await updateAsset(hass, asset.id, { [field]: input.value || null }); });
         showToast("Saved", "success", 2000);
       }
@@ -355,6 +477,7 @@ function renderEntitiesTab(panel, hass, asset, entities) {
     if (e.kind === "number" || e.kind === "text") {
       inlineValue = h("input", {
         class: "am-input am-inline-value",
+        "data-field": `entity-value-${e.id}`,
         value: e.value == null ? "" : String(e.value),
         type: e.kind === "number" ? "number" : "text",
         placeholder: "value"});
@@ -364,7 +487,7 @@ function renderEntitiesTab(panel, hass, asset, entities) {
         if (raw === "") next = null;
         else if (e.kind === "number") next = Number(raw);
         else next = raw;
-        try { await withBusy(inlineValue, async () => {
+        try { await withBusy(null, async () => {
           await updateEntity(hass, e.id, { value: next }); });
           showToast("Value saved", "success", 2000);
         } catch (err) {

@@ -49,6 +49,7 @@ import {
   templateList,
   listLabels,
   getAssetLabels,
+  getAreas,
   wsSubscribe,
 } from "./ws.js";
 import {
@@ -77,6 +78,16 @@ class AssetManagerPanel extends HTMLElement {
     this._sort = "name";
     this._activeLabel = null;
     this._selectedEntityIds = new Set();
+    // Asset list table: which columns are visible. Persisted to
+    // localStorage so the user's choice survives reloads.
+    this._listColumns = (() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem("am-list-columns") || "null");
+        if (Array.isArray(saved) && saved.length) return saved;
+      } catch { /* ignore */ }
+      return ["icon", "name", "manufacturer", "model", "entities"];
+    })();
+    this._assetAreas = new Map(); // asset_id -> area_id
   }
 
   connectedCallback() { injectStyles(); this._render(); }
@@ -108,14 +119,15 @@ class AssetManagerPanel extends HTMLElement {
     const applyEntities = (items) => apply("entities", items);
     const applyTemplates = (items) => apply("templates", items);
     try {
-      const [assets, entities, templates, labels, assetLabels] = await Promise.all([
+      const [assets, entities, templates, labels, assetLabels, areas] = await Promise.all([
         assetList(hass), entityList(hass), templateList(hass),
-        listLabels(hass), getAssetLabels(hass)]);
+        listLabels(hass), getAssetLabels(hass), getAreas(hass)]);
       applyAssets(assets);
       applyEntities(entities);
       applyTemplates(templates);
       this._labelRegistry = new Map(labels.map((l) => [l.label_id, l]));
       this._assetLabels = new Map(Object.entries(assetLabels.asset_labels));
+      this._assetAreas = new Map(Object.entries(areas.asset_areas || {}));
     } catch (e) {
       this._renderError(e);
       return;
@@ -162,6 +174,20 @@ class AssetManagerPanel extends HTMLElement {
   }
 
   _render() {
+    // Preserve keyboard focus across the full shadow-DOM rebuild that
+    // follows: if an input/textarea with a data-field attribute has
+    // focus, snapshot its name + selection, then restore after rebuild.
+    // This keeps the caret in place when auto-save triggers a re-render.
+    let focusSnapshot = null;
+    const active = this._shadow.activeElement;
+    if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")
+        && active.dataset && active.dataset.field) {
+      focusSnapshot = {
+        field: active.dataset.field,
+        start: active.selectionStart,
+        end: active.selectionEnd,
+      };
+    }
     const root = clear(this._shadow);
     if (!this._hass) return;
     root.append(h("style", {}, STYLES));
@@ -175,10 +201,30 @@ class AssetManagerPanel extends HTMLElement {
     if (this._view.name === "list") root.append(renderListView(this));
     else if (this._view.name === "detail") root.append(renderDetailView(this));
     else if (this._view.name === "templates") root.append(renderTemplatesView(this));
+    if (focusSnapshot) {
+      const el = this._shadow.querySelector(`[data-field="${CSS.escape(focusSnapshot.field)}"]`);
+      if (el) {
+        try {
+          el.focus();
+          if (typeof el.setSelectionRange === "function" && focusSnapshot.start != null) {
+            el.setSelectionRange(focusSnapshot.start, focusSnapshot.end ?? focusSnapshot.start);
+          }
+        } catch { /* ignore */ }
+      }
+    }
   }
 
   _goDetail(id) { this._view = { name: "detail", assetId: id, tab: "info" }; this._render(); }
   _goList() { this._view = { name: "list" }; this._render(); }
+
+  // Resolve an asset's area name for the list table. Returns "" if the
+  // asset has no area or the area no longer exists.
+  _areaName(assetId) {
+    const areaId = this._assetAreas.get(assetId);
+    if (!areaId || !this._hass || !this._hass.areas) return "";
+    const area = this._hass.areas[areaId];
+    return area ? (area.name || areaId) : "";
+  }
 }
 
 customElements.define("asset-manager-panel", AssetManagerPanel);
