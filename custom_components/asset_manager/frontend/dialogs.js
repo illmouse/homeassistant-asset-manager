@@ -76,11 +76,25 @@ export function assetCreateDialog(hass, onCreated) {
     }
   }).catch(() => { /* leave blank-only option */ });
 
+  // Track which template's defaults are currently reflected in the
+  // icon/label pickers so switching templates overrides only values that
+  // are still defaulted to the previous template — not user edits.
+  let prevTemplate = null;
+  const sameLabels = (a, b) => {
+    const sa = [...(a || [])].sort();
+    const sb = [...(b || [])].sort();
+    return sa.length === sb.length && sa.every((v, i) => v === sb[i]);
+  };
+
   templateSelect.addEventListener("change", () => {
-    const t = templates_.find((x) => x.id === templateSelect.value);
-    if (!t) return;
-    if (!iconPicker.get() && t.icon) iconPicker.container.value = t.icon;
-    if (!labelPicker.get().length && t.labels?.length) labelPicker.set(t.labels);
+    const t = templates_.find((x) => x.id === templateSelect.value) || null;
+    const iconDefaulted = !iconPicker.get()
+      || (prevTemplate && iconPicker.get() === prevTemplate.icon);
+    const labelsDefaulted = !labelPicker.get().length
+      || (prevTemplate && sameLabels(labelPicker.get(), prevTemplate.labels));
+    if (iconDefaulted) iconPicker.set(t?.icon || "");
+    if (labelsDefaulted) labelPicker.set(t?.labels || []);
+    prevTemplate = t;
   });
 
   submit.addEventListener("click", async () => {

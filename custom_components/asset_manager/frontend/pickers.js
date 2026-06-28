@@ -36,6 +36,11 @@ export function buildIconPicker(initial = "", onChange = null) {
     return {
       container: picker,
       get: () => current,
+      set: (value) => {
+        current = value || "";
+        picker.value = current;
+        if (onChange) onChange(current);
+      },
     };
   }
 
@@ -50,6 +55,10 @@ export function buildIconPicker(initial = "", onChange = null) {
   return {
     container: input,
     get: () => input.value.trim(),
+    set: (value) => {
+      input.value = value || "";
+      if (onChange) onChange(input.value.trim());
+    },
   };
 }
 
