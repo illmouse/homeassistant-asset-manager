@@ -119,6 +119,7 @@ export const STYLES = `
   .am-filters { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
   .am-filters .am-search { flex: 1 1 220px; margin: 0; }
   .am-sort { flex: 0 0 auto; }
+  .am-filter-select { flex: 0 0 auto; }
 
   /* Column picker for the asset list table */
   .am-col-picker { position: relative; flex: 0 0 auto; }
@@ -140,6 +141,7 @@ export const STYLES = `
                  white-space: nowrap; }
   .am-table-sortable { cursor: pointer; user-select: none; }
   .am-table-sortable:hover { color: var(--primary-color, #03a9f4); }
+  .am-table-sortable.active { color: var(--primary-color, #03a9f4); }
   .am-table-icon-th { width: 32px; }
   .am-table-actions-th { text-align: right; white-space: nowrap; }
   .am-table td { padding: 8px 10px; border-bottom: 1px solid var(--divider-color, #eee);
@@ -251,6 +253,7 @@ export const STYLES = `
   .am-root.am-narrow .am-batch-bar .am-btn { flex: 1 1 auto; }
   .am-root.am-narrow .am-filters { flex-direction: column; align-items: stretch; }
   .am-root.am-narrow .am-sort { width: 100%; }
+  .am-root.am-narrow .am-filter-select { width: 100%; }
   .am-root.am-narrow .am-col-picker { align-self: flex-end; }
 `;
 

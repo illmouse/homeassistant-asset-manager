@@ -76,7 +76,9 @@ class AssetManagerPanel extends HTMLElement {
     // ephemeral UI state held outside _view so re-renders don't wipe it
     this._search = "";
     this._sort = "name";
+    this._sortDir = "asc";
     this._activeLabel = null;
+    this._filters = {}; // property -> selected value (null = "All")
     this._selectedEntityIds = new Set();
     // Asset list table: which columns are visible. Persisted to
     // localStorage so the user's choice survives reloads.

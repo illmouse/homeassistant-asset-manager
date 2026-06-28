@@ -128,6 +128,68 @@ export function renderListView(panel) {
     h("option", { value: "entities", selected: panel._sort === "entities" }, "Sort: Entity count"));
   sort.addEventListener("change", () => { panel._sort = sort.value; renderTable(); });
 
+  // Filter dropdowns: one <select> per filterable property. They
+  // combine with AND alongside search + label chips. Each defaults to
+  // "All [prop]". Options are derived from distinct values across the
+  // current asset set.
+  const filterDefs = [
+    { prop: "area", label: "All areas", options: () => {
+        const ids = [...new Set([...panel._assetAreas.values()].filter(Boolean))];
+        return ids.map((id) => {
+          const area = panel._hass.areas && panel._hass.areas[id];
+          return { value: id, label: area ? (area.name || id) : id };
+        }).sort((a, b) => a.label.localeCompare(b.label));
+      }, match: (a, v) => (panel._assetAreas.get(a.id) || null) === v },
+    { prop: "manufacturer", label: "All manufacturers", options: () => {
+        const vals = [...new Set([...panel._assets.values()]
+          .map((a) => a.manufacturer).filter(Boolean))].sort();
+        return vals.map((v) => ({ value: v, label: v }));
+      }, match: (a, v) => a.manufacturer === v },
+    { prop: "model", label: "All models", options: () => {
+        const vals = [...new Set([...panel._assets.values()]
+          .map((a) => a.model).filter(Boolean))].sort();
+        return vals.map((v) => ({ value: v, label: v }));
+      }, match: (a, v) => a.model === v },
+    { prop: "serial", label: "All serials", options: () => {
+        const vals = [...new Set([...panel._assets.values()]
+          .map((a) => a.serial).filter(Boolean))].sort();
+        return vals.map((v) => ({ value: v, label: v }));
+      }, match: (a, v) => a.serial === v },
+    { prop: "entities", label: "Any count", options: () => [
+        { value: "0", label: "0 entities" },
+        { value: "1-5", label: "1-5 entities" },
+        { value: "6+", label: "6+ entities" },
+      ], match: (a, v) => {
+        const n = [...panel._entities.values()].filter((e) => e.asset_id === a.id).length;
+        if (v === "0") return n === 0;
+        if (v === "1-5") return n >= 1 && n <= 5;
+        if (v === "6+") return n >= 6;
+        return false;
+      }},
+    { prop: "icon", label: "Any", options: () => [
+        { value: "yes", label: "With icon" },
+        { value: "no", label: "Without icon" },
+      ], match: (a, v) => v === "yes" ? !!a.icon : !a.icon },
+  ];
+  const filterSelects = filterDefs.map((fd) => {
+    const opts = fd.options();
+    // Sanitize: if the stored selection is no longer in options, reset.
+    if (panel._filters[fd.prop] && !opts.some((o) => o.value === panel._filters[fd.prop])) {
+      panel._filters[fd.prop] = null;
+    }
+    const sel = h("select", { class: "am-select am-filter-select" },
+      h("option", { value: "" }, fd.label),
+      ...opts.map((o) => h("option", {
+        value: o.value,
+        selected: (panel._filters[fd.prop] || "") === o.value ? true : null,
+      }, o.label)));
+    sel.addEventListener("change", () => {
+      panel._filters[fd.prop] = sel.value || null;
+      renderTable();
+    });
+    return sel;
+  });
+
   // Label chips derived from all assets' device labels. We fetch the
   // asset→labels map async, plus the label registry for display names.
   const labelsRow = h("div", { class: "am-tags" });
@@ -169,23 +231,32 @@ export function renderListView(panel) {
         (a.manufacturer || "").toLowerCase().includes(q) ||
         (a.model || "").toLowerCase().includes(q);
     });
+    // Apply multi-property filter dropdowns (AND combination).
+    const activeFilters = filterDefs.filter((fd) => panel._filters[fd.prop]);
+    if (activeFilters.length) {
+      items = items.filter((a) => activeFilters.every((fd) => fd.match(a, panel._filters[fd.prop])));
+    }
     const entityCount = (id) => [...panel._entities.values()].filter((e) => e.asset_id === id).length;
+    const desc = panel._sortDir === "desc";
     items.sort((a, b) => {
-      if (panel._sort === "manufacturer") return (a.manufacturer || "").localeCompare(b.manufacturer || "");
-      if (panel._sort === "model") return (a.model || "").localeCompare(b.model || "");
-      if (panel._sort === "serial") return (a.serial || "").localeCompare(b.serial || "");
-      if (panel._sort === "area") {
-        const an = panel._areaName(a.id);
-        const bn = panel._areaName(b.id);
-        return an.localeCompare(bn);
-      }
-      if (panel._sort === "entities") return entityCount(b.id) - entityCount(a.id);
-      return a.name.localeCompare(b.name);
+      let r;
+      if (panel._sort === "manufacturer") r = (a.manufacturer || "").localeCompare(b.manufacturer || "");
+      else if (panel._sort === "model") r = (a.model || "").localeCompare(b.model || "");
+      else if (panel._sort === "serial") r = (a.serial || "").localeCompare(b.serial || "");
+      else if (panel._sort === "area") r = panel._areaName(a.id).localeCompare(panel._areaName(b.id));
+      else if (panel._sort === "entities") r = entityCount(a.id) - entityCount(b.id);
+      else r = a.name.localeCompare(b.name);
+      return desc ? -r : r;
     });
     clear(tableHolder);
     if (!items.length) {
+      const reasons = [];
+      if (labelId) reasons.push(`label “${(panel._labelRegistry.get(labelId) || {}).name || labelId}”`);
+      const active = filterDefs.filter((fd) => panel._filters[fd.prop]);
+      if (active.length) reasons.push(`${active.length} filter${active.length > 1 ? "s" : ""}`);
+      if (q) reasons.push(`search “${panel._search}”`);
       tableHolder.append(h("p", { class: "am-muted", style: "text-align:center" },
-        labelId ? `No assets with label “${(panel._labelRegistry.get(labelId) || {}).name || labelId}”.` : `No assets match “${panel._search}”.`));
+        reasons.length ? `No assets match: ${reasons.join(" + ")}.` : "No assets."));
       return;
     }
 
@@ -194,11 +265,20 @@ export function renderListView(panel) {
       ...visibleCols.map((key) => {
         const col = LIST_COLUMNS.find((c) => c.key === key);
         if (!col || key === "icon") return h("th", { class: "am-table-icon-th" }, "");
-        const sortIndicator = panel._sort === key ? " ▾" : "";
+        const isActive = panel._sort === key;
+        const indicator = isActive ? (panel._sortDir === "desc" ? " ▾" : " ▴") : "";
         return col.sortable
-          ? h("th", { class: "am-table-sortable",
-              onClick: () => { panel._sort = key; sort.value = key; renderTable(); } },
-              col.label + sortIndicator)
+          ? h("th", { class: "am-table-sortable" + (isActive ? " active" : ""),
+              onClick: () => {
+                if (panel._sort === key) {
+                  panel._sortDir = panel._sortDir === "asc" ? "desc" : "asc";
+                } else {
+                  panel._sort = key;
+                  panel._sortDir = "asc";
+                }
+                renderTable();
+              } },
+              col.label + indicator)
           : h("th", {}, col.label);
       }),
       h("th", { class: "am-table-actions-th" }, "Actions"));
@@ -272,7 +352,7 @@ export function renderListView(panel) {
   });
   renderTable();
 
-  card.append(h("div", { class: "am-filters" }, search, sort, colPicker), labelsRow, tableHolder);
+  card.append(h("div", { class: "am-filters" }, search, ...filterSelects, colPicker), labelsRow, tableHolder);
   return h("div", { class: `am-root${panel._narrow ? " am-narrow" : ""}` }, header, card);
 }
 
