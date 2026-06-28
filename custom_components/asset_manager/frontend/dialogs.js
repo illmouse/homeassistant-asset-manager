@@ -67,12 +67,21 @@ export function assetCreateDialog(hass, onCreated) {
   close.addEventListener("click", () => modal.remove());
 
   // Populate template options (built-in + user templates).
+  let templates_ = [];
   templateList(hass).then((templates) => {
+    templates_ = templates;
     for (const t of [...templates].sort((a, b) => a.name.localeCompare(b.name))) {
       templateSelect.append(h("option", { value: t.id },
         `${t.name} (${t.entities?.length || 0} entities)`));
     }
   }).catch(() => { /* leave blank-only option */ });
+
+  templateSelect.addEventListener("change", () => {
+    const t = templates_.find((x) => x.id === templateSelect.value);
+    if (!t) return;
+    if (!iconPicker.get() && t.icon) iconPicker.container.value = t.icon;
+    if (!labelPicker.get().length && t.labels?.length) labelPicker.set(t.labels);
+  });
 
   submit.addEventListener("click", async () => {
     const name = nameInput.value.trim();
@@ -86,7 +95,7 @@ export function assetCreateDialog(hass, onCreated) {
       await withBusy(submit, async () => {
         const asset = await createAsset(hass, name, icon ? { icon } : {});
         if (templateId) {
-          try { await applyTemplate(hass, asset.id, templateId); }
+          try { await applyTemplate(hass, asset.id, templateId, false); }
           catch (e) {
             err.textContent = `Template failed: ${e.message || e}`;
           }
