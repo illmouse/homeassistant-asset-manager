@@ -17,6 +17,8 @@ import {
   deleteEntity,
   deleteAsset,
   templateDelete,
+  getAreas,
+  updateArea,
 } from "./ws.js";
 import { showToast, confirmDialog, withBusy, makeSwitch } from "./ui.js";
 import {
@@ -26,6 +28,7 @@ import {
   entityEditorDialog,
   templateEditorDialog,
 } from "./dialogs.js";
+import { buildIconPicker, buildAreaPicker } from "./pickers.js";
 
 export const renderEmptyState = (icon, title, body) =>
   h("div", { class: "am-empty" },
@@ -107,9 +110,13 @@ export function renderListView(panel) {
     }
     for (const asset of items) {
       const ents = entityCount(asset.id);
+      const iconEl = asset.icon
+        ? h("ha-icon", { icon: asset.icon, style: "margin-right:6px;vertical-align:middle" })
+        : null;
       listHolder.append(h("div", { class: "am-row" },
         h("span", { class: "am-grow", style: "cursor:pointer;font-weight:500",
                     onClick: () => panel._goDetail(asset.id) },
+          iconEl,
           `${asset.name} `,
           h("span", { class: "am-muted", style: "font-weight:normal" },
             `· ${ents} entit${ents === 1 ? "y" : "ies"}`)),
@@ -186,13 +193,47 @@ function renderInfoTab(panel, hass, asset) {
     }
     catch (e) { showToast(String(e.message || e), "error", 6000); }
   });
+
+  // Icon picker: native ha-icon-picker (searchable dropdown of mdi glyphs).
+  // Saves on selection; falls back to a text input if the element is absent.
+  const saveIcon = async (val) => {
+    try { await withBusy(null, async () => {
+      await updateAsset(hass, asset.id, { icon: val || null }); });
+      showToast("Icon saved", "success", 2000);
+    } catch (e) { showToast(String(e.message || e), "error", 6000); }
+  };
+  const iconPicker = buildIconPicker(asset.icon || "", (val) => saveIcon(val));
+
+  // Area picker: native ha-area-picker pulls areas from @lit/context
+  // providers in HA's app tree. The current area_id still comes from
+  // the WS get_areas call (which maps asset_id -> area_id via the
+  // device registry), so we await that before constructing the picker.
+  const areaHolder = h("div", {});
+  getAreas(hass).then(({ asset_areas }) => {
+    const current = asset_areas[asset.id] || null;
+    const onSave = async (val) => {
+      try { await withBusy(null, async () => {
+            await updateArea(hass, asset.id, val); });
+        showToast("Area saved", "success", 2000);
+      } catch (e) { showToast(String(e.message || e), "error", 6000); }
+    };
+    const areaPicker = buildAreaPicker(hass, current, onSave);
+    areaHolder.append(areaPicker.container);
+  }).catch(() => {
+    areaHolder.append(h("p", { class: "am-muted" }, "Area unavailable."));
+  });
+
   return h("div", { class: "am-grid" },
     make("name", "Name"),
     make("manufacturer", "Manufacturer"),
     make("model", "Model"),
     make("serial", "Serial"),
-    make("icon", "Icon"),
-    h("div", { class: "am-field" }, h("label", {}, "Tags"), tagsInput));
+    h("div", { class: "am-field", style: "grid-column: 1 / -1" },
+      h("label", {}, "Icon"), iconPicker.container),
+    h("div", { class: "am-field" },
+      h("label", {}, "Area"), areaHolder),
+    h("div", { class: "am-field", style: "grid-column: 1 / -1" },
+      h("label", {}, "Tags"), tagsInput));
 }
 
 function renderEntitiesTab(panel, hass, asset, entities) {
@@ -207,7 +248,10 @@ function renderEntitiesTab(panel, hass, asset, entities) {
   }
 
   // Batch toolbar: select-all + enable/disable/delete on selection.
-  const selectAll = h("input", { type: "checkbox", class: "am-checkbox" });
+  const useNativeCb = customElements.get("ha-checkbox");
+  const selectAll = useNativeCb
+    ? document.createElement("ha-checkbox")
+    : h("input", { type: "checkbox", class: "am-checkbox" });
   const batchLabel = h("span", { class: "am-grow" }, `${panel._selectedEntityIds.size} selected`);
   const batchEnable = h("button", { class: "am-btn", disabled: "" }, "Enable");
   const batchDisable = h("button", { class: "am-btn secondary", disabled: "" }, "Disable");
@@ -256,7 +300,9 @@ function renderEntitiesTab(panel, hass, asset, entities) {
   const list = h("div", {});
   for (const e of entities) {
     const selected = panel._selectedEntityIds.has(e.id);
-    const checkbox = h("input", { type: "checkbox", class: "am-checkbox" });
+    const checkbox = useNativeCb
+      ? document.createElement("ha-checkbox")
+      : h("input", { type: "checkbox", class: "am-checkbox" });
     checkbox.checked = selected;
     checkbox.addEventListener("change", () => {
       if (checkbox.checked) panel._selectedEntityIds.add(e.id);
@@ -270,7 +316,7 @@ function renderEntitiesTab(panel, hass, asset, entities) {
         await updateEntity(hass, e.id, { enabled: next }); });
         showToast(`“${e.name}” ${next ? "enabled" : "disabled"}`, "success", 2000);
       } catch (err) {
-        toggle.querySelector("input").checked = !next; // revert
+        toggle.checked = !next; // revert
         showToast(String(err.message || err), "error", 6000);
       }
     });

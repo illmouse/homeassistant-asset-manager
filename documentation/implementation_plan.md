@@ -1,133 +1,75 @@
 # Asset Manager — Implementation Plan
 
-Iterative, each phase shippable to a real HA instance for validation.
-Between phases: develop in the devcontainer, run pytest, only push to
-real HA for end-to-end sanity.
+Phases 0–4 are complete: the integration is functional end-to-end from
+UI. We are now closing out an **MVP** — the minimum needed to publish as
+a usable HACS integration. Post-MVP work (refactoring, new features) is
+tracked separately at the bottom.
 
-## Phase 0 — Scaffold
-Deliverable: repo skeleton + empty integration + import test.
-- `custom_components/asset_manager/{__init__.py,const.py,manifest.json}`
-- Stub `config_flow.py` (single user_initiated step, no options)
-- `tests/components/asset_manager/__init__.py` + `test_init.py`
-  asserting `async_setup_entry` returns True.
-- `.devcontainer/` copied from HA core devcontainer reference.
-- `pyproject.toml` (ruff config matching HA core), `requirements_test.txt`.
-Exit criteria: devcontainer boots HA, integration installs, nothing else.
+## Completed (Phases 0–4)
 
-## Phase 1 — Storage + CRUD primitives
-Deliverable: create/edit/delete assets and entities via WebSocket.
-- `models.py`: `Asset`, `EntityDef` dataclasses + voluptuous schemas.
-- `storage.py`: `AssetStorageCollection`, `EntityStorageCollection`
-  wrapping `StorageCollection` with `ObservableCollection.websocket_api`
-  prefix `asset_manager/assets/*`, `asset_manager/entities/*`.
-- `coordinator.py`: subscribes to collection changes, reconciles
-  device registry + live entities.
-- `entity.py`: `AssetNumberEntity`, `AssetSensorEntity`, `AssetDateEntity`,
-  `AssetTextEntity`, `AssetSelectEntity`, `AssetButtonEntity`,
-  `AssetSwitchEntity` — thin wrappers reading from collection state.
-- Tests: snapshot tests for WS create/update/delete flows; reconcile
-  tests asserting device+entity registry entries appear/disappear.
-Exit criteria: `wscat` against HA can create an asset, add a number
-entity, set its value, and the device+entity appear in HA UI.
+| Phase | What landed | Commit |
+|---|---|---|
+| 0 — Scaffold | Repo skeleton, config flow, import test, devcontainer | `85fd0c8` |
+| 1 — Storage + CRUD | `Asset`/`EntityDef` models, `StorageCollection`-backed assets/entities, coordinator reconciles device + entity registries, 7 entity platforms, WS CRUD + subscribe | `eb9e017` |
+| 2 — Templates + Clone | `Template` model, 7 bundled JSON presets, idempotent seeding, `apply_template` + `clone_asset` WS commands | `9ab9e1e` |
+| 3 — Derived sensors | Pure `formula.py` evaluator (no `eval`), `DerivedEvaluator` with midnight tick, `AssetDerivedEntity` on `sensor` platform, Vehicle template `days_until_oil_change` | `8418cbd` |
+| 4 — Frontend panel | `panel.py` serves `frontend/` + registers `custom` panel; single-file ES module (now split into 9 modules: `asset-manager-panel.js` + `views`/`dialogs`/`pickers`/`config-fields`/`ui`/`ws`/`dom`/`styles`/`constants`); list/detail(info+entities)/template-picker/clone dialogs; live updates via collection subscribe | `96dd815`, `4fdc04e` |
 
-## Phase 2 — Templates + Clone ✅ DONE (commit `9ab9e1e`)
-Deliverable: apply a template, clone an asset.
-- `TemplateStorageCollection` with prefix `asset_manager/templates/*`.
-- Bundled JSON presets: Vehicle, HVAC, Water Filter, Appliance,
-  Coffee Machine, UPS, Generic Asset.
-- WS commands `asset_manager/apply_template` and `asset_manager/clone_asset`.
-- Template editor in storage layer (frontend deferred to Phase 4).
-Exit criteria: applying "Vehicle" creates ~10 entities on a new asset;
-cloning reproduces all entities onto a renamed asset.
+**Tests:** 86 passing, 85% coverage, ruff clean.
+**HA version:** runs against `stable` (currently 2026.6.4) via
+`dev/compose.yml`; tests pin HA 2026.2.3 on the host venv.
 
-Result:
-- `Template` dataclass + `TEMPLATE_*` schemas in `models.py` (specs
-  reuse per-kind config validation; `asset_id` absent from specs).
-- `TemplateStorageCollection` in `storage.py`; `async_load_collections`
-  now returns `(assets, entities, templates)` 3-tuple.
-- `async_seed_builtin_templates` loads the 7 JSON presets from
-  `custom_components/asset_manager/templates/` idempotently on first
-  load (skips ids already present).
-- `ws.py` registers `asset_manager/apply_template` (idempotent — skips
-  existing `{asset_id}-{slug}` ids) and `asset_manager/clone_asset`
-  (creates a renamed asset with blank serial, copies all entity defs).
-- Coordinator takes `templates` as 4th positional arg; bespoke
-  commands registered from `async_setup_entry`.
-- Tests: 12 new in `test_templates.py` (seeding, idempotency, WS CRUD,
-  apply, clone, error codes, storage round-trip). 45 total, ruff clean.
-- Deviation: `serial`/`icon`/`unit_of_measurement` omitted from clone
-  payload when source value is None (voluptuous `str`/`cv.icon` reject
-  None even when optional); absence is valid.
+## MVP — to publish
 
-## Phase 3 — Derived sensors ✅ DONE (commit `8418cbd`)
-Deliverable: automatic `sensor.asset_*` computed from manual entities.
-- `derived.py`: declarative formula evaluator; expressions reference
-  other entities by unique_id; runs on `EVENT_STATE_CHANGED`.
-- Spec lives inside the asset definition: `{kind: derived, formula: "..."}`
-- Initial operator set: arithmetic, datediff, now(), comparisons.
-Exit criteria: defining `oil_change_date` + `interval_days` yields a
-`days_until_oil_change` sensor that updates daily.
+Goal: a user can install via HACS, build an asset from scratch, apply
+templates, clone, edit entities, and see derived sensors — all from the
+UI, with sensible errors and a README.
 
-Result:
-- `formula.py`: pure recursive-descent parser/evaluator (no `eval`, no
-  HA deps). Supports arithmetic, comparisons, boolean, parentheses,
-  string literals, and whitelisted functions (`now`, `datediff`, `days`,
-  `abs`, `min`, `max`, `round`). Date subtraction auto-extracts `.days`.
-- `derived.py`: `coerce_value` (typed sibling resolution) +
-  `DerivedEvaluator` (recomputes on entity-collection changes via the
-  coordinator; daily midnight tick via `async_track_time_change`).
-- `AssetDerivedEntity` in `entity.py` extends `SensorEntity`; derived
-  entities exposed on the `sensor` platform via `platform_for_kind`.
-- `DERIVED_CONFIG_SCHEMA` requires `config.formula`; shared by
-  `ENTITY_CREATE_SCHEMA` and `TEMPLATE_ENTITY_SPEC_SCHEMA`.
-- Vehicle template gained `days_until_oil_change` derived entity (11 total).
-- 32 new tests in `test_derived.py`; 77 total pass; 85% coverage; ruff clean.
-- Deviations: recompute driven by entity-collection listener (not
-  `EVENT_STATE_CHANGED`); None-aware arithmetic; self-reference → None.
+- [ ] **Template CRUD editor in UI** — currently apply-only; add
+  create/edit/delete template dialog. Backend `templates/*` WS CRUD
+  already exists (Phase 2 storage); only frontend missing.
+- [ ] **Error UX** — surface voluptuous validation errors in dialogs
+  (create/update entity, template apply) instead of generic toasts.
+  Needs `ws.js` to extract `error.message` from WS error responses and
+  dialogs to render an `.am-error` line per field.
+- [ ] **README.md** — install via HACS, screenshots, what it does, link
+  to docs. Required for HACS listing.
+- [ ] **hacs.json** — HACS manifest (`manifest.json` already valid for
+  HA; `hacs.json` just declares the repo type + filename).
+- [ ] **Backup note** — one paragraph in README pointing at
+  `.storage/asset_manager/` (assets, entities, templates collections).
 
-## Phase 4 — Frontend panel ✅ DONE (commit `96dd815`)
-Deliverable: Settings → Asset Manager UI.
-- `frontend_extra/asset_manager/` panel source (compiled to `frontend/`).
-- Views: AssetList, AssetDetail (Info/Entities tabs),
-  EntityEditor modal, TemplatePicker dialog, CloneDialog.
-- Wired to WS commands; subscribes to collection change events for
-  live updates.
-Exit criteria: end-user can build a car asset from scratch via UI.
+Exit criteria: installable via HACS; a fresh user can build a car asset
+with a Vehicle template, edit entities, and see `days_until_oil_change`
+update — without touching YAML or WS.
 
-Result:
-- `panel.py` serves `custom_components/asset_manager/frontend/` at
-  `/api/asset_manager/static` and registers HA's bundled `custom`
-  panel at sidebar path `asset-manager` (admin-only,
-  `config_panel_domain=asset_manager`, `module_url` →
-  `asset-manager-panel.js`). Register on setup, remove on unload.
-- `frontend/asset-manager-panel.js`: single self-contained ES module
-  (`customElements.define("asset-manager-panel")`, no Lit/Vite build).
-  Views: AssetList (Add/Clone/Delete), AssetDetail (Info tab inline-
-  editable; Entities tab list + Add/Edit modal with per-kind JSON
-  config), TemplatePicker (apply-only), CloneDialog. Live updates via
-  `asset_manager/{assets,entities}/subscribe`.
-- 5 new tests in `test_panel.py`; 82 total pass; 85% coverage; ruff
-  clean. HA 2026.7.0b1 boots in ~3.6s; panel module served HTTP 200.
-- Deviations: `frontend_extra/` compile step unavailable to custom
-  integrations → single-file ES module served via
-  `hass.http.async_register_static_paths` + `custom` panel.
-  Template CRUD editor deferred to Phase 5 (apply-only here). Removed
-  deadlocking `async_block_till_done()` from `async_setup_entry`.
-  Fixed Phase 2 blocking `open()` in `async_seed_builtin_templates`
-  (now `hass.async_add_executor_job`; takes `hass` as 1st arg).
+## Post-MVP — refactor and new features
 
-## Phase 5 — Polish
+Tracked here so we don't lose the ideas; not sequenced. Pick up after
+MVP ships.
+
+**Refactoring**
+- Frontend module review after the 9-way split (consistency, dead code,
+  `ha-icon-picker`/`ha-area-picker` boundary notes in `pickers.js`).
+- Coordinator reconcile path is O(entities) per change — index by
+  asset_id if asset counts grow.
+- `formula.py` error messages could carry entity-slug positions for
+  better editor feedback.
+
+**Features**
 - Import/Export (JSON) for templates and asset packs.
-- Backup story documented (point at `.storage/asset_manager/`).
-- Automation-friendly: trigger events on derived-threshold crossings;
-  expose `asset_manager.service_due` events.
-- Error UX (validation errors surfaced from voluptuous in UI).
-- HA store review prep: hacs.json, README.md, screenshots.
-Exit criteria: publishable as a HACS custom integration.
+- Automation-friendly: `asset_manager.service_due` events on derived
+  threshold crossings; configurable triggers.
+- Area picker: bridge `@lit/context` from the panel host so we can use
+  native `ha-area-picker` (searchable combobox) instead of `<select>`.
+  See `pickers.js` header comment for the blocker.
+- Per-entity history / state-change log (leveraging HA's recorder).
+- Tag-based dashboards (auto-generate a dashboard per asset tag).
 
 ## Testing strategy
-- Unit tests in pytest — no HA Core needed for models/storage/derived.
-- Integration tests via `pytest-ha` (or built-in `async_setup_component`)
-  against real HA devcontainer instance.
-- Snapshot tests (Syrupy) for WS payloads and registry state.
-- Manual UI smoke in devcontainer before each phase merge.
+- Unit tests in pytest on the host venv (no HA Core needed for
+  models/storage/derived/formula).
+- Integration tests via `pytest-homeassistant-custom-component` against
+  pinned HA 2026.2.3.
+- Manual UI smoke against the `dev/compose.yml` stack (HA `stable`)
+  before each merge — see `documentation/devcontainer-setup.md`.

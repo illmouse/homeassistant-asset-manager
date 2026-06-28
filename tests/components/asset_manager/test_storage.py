@@ -180,11 +180,14 @@ async def test_ws_create_asset(
     """The asset_manager/assets/create WS command creates an asset."""
     await _setup_integration(hass, enable_custom_integrations)
     client = await hass_ws_client(hass)
-    await client.send_json_auto_id({"type": "asset_manager/assets/create", "name": "Van"})
+    await client.send_json_auto_id(
+        {"type": "asset_manager/assets/create", "name": "Van", "icon": "mdi:car"}
+    )
     response = await client.receive_json()
     assert response["success"] is True
     assert response["result"]["name"] == "Van"
     assert response["result"]["id"] == "van"
+    assert response["result"]["icon"] == "mdi:car"
 
 
 async def test_ws_list_assets(
@@ -240,6 +243,125 @@ async def test_ws_delete_asset(
     response = await client.receive_json()
     assert response["success"] is True
     assert "scooter" not in assets.data
+
+
+async def test_ws_update_asset_icon(
+    hass: HomeAssistant,
+    enable_custom_integrations: None,
+    hass_ws_client,
+) -> None:
+    """The asset_manager/assets/update WS command updates the asset icon."""
+    await _setup_integration(hass, enable_custom_integrations)
+    await _assets_collection(hass).async_create_item({"name": "Car"})
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "asset_manager/assets/update", "asset_id": "car", "icon": "mdi:car"}
+    )
+    response = await client.receive_json()
+    assert response["success"] is True
+    assert response["result"]["icon"] == "mdi:car"
+
+
+async def test_ws_update_area(
+    hass: HomeAssistant,
+    enable_custom_integrations: None,
+    hass_ws_client,
+) -> None:
+    """The asset_manager/update_area WS command assigns the device to an area."""
+    from homeassistant.helpers import area_registry as ar
+    from homeassistant.helpers import device_registry as dr
+
+    await _setup_integration(hass, enable_custom_integrations)
+    await _assets_collection(hass).async_create_item({"name": "Car"})
+    await hass.async_block_till_done()
+
+    area_registry = ar.async_get(hass)
+    area = area_registry.async_create("Garage")
+    dev_reg = dr.async_get(hass)
+    device = dev_reg.async_get_device({(DOMAIN, "car")})
+    assert device is not None
+    assert device.area_id is None
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "asset_manager/update_area", "asset_id": "car", "area_id": area.id}
+    )
+    response = await client.receive_json()
+    assert response["success"] is True
+    assert response["result"]["area_id"] == area.id
+    device = dev_reg.async_get_device({(DOMAIN, "car")})
+    assert device is not None
+    assert device.area_id == area.id
+
+    # Clearing the area with None is supported.
+    await client.send_json_auto_id(
+        {"type": "asset_manager/update_area", "asset_id": "car", "area_id": None}
+    )
+    response = await client.receive_json()
+    assert response["success"] is True
+    assert response["result"]["area_id"] is None
+    device = dev_reg.async_get_device({(DOMAIN, "car")})
+    assert device is not None
+    assert device.area_id is None
+
+
+async def test_ws_update_area_preserved_across_asset_update(
+    hass: HomeAssistant,
+    enable_custom_integrations: None,
+    hass_ws_client,
+) -> None:
+    """A user-set area survives a subsequent asset field update.
+
+    The coordinator calls async_get_or_create on every asset update; HA's
+    device registry only overwrites fields that are explicitly passed, and
+    the coordinator never passes area_id, so the area must persist.
+    """
+    from homeassistant.helpers import area_registry as ar
+    from homeassistant.helpers import device_registry as dr
+
+    await _setup_integration(hass, enable_custom_integrations)
+    assets = _assets_collection(hass)
+    await assets.async_create_item({"name": "Car"})
+    await hass.async_block_till_done()
+
+    area = ar.async_get(hass).async_create("Garage")
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "asset_manager/update_area", "asset_id": "car", "area_id": area.id}
+    )
+    await client.receive_json()
+
+    # Now rename the asset — coordinator reconciles the device via
+    # async_get_or_create, which must NOT wipe the area.
+    await assets.async_update_item("car", {"name": "Roadster"})
+    await hass.async_block_till_done()
+    device = dr.async_get(hass).async_get_device({(DOMAIN, "car")})
+    assert device is not None
+    assert device.name == "Roadster"
+    assert device.area_id == area.id
+
+
+async def test_ws_get_areas(
+    hass: HomeAssistant,
+    enable_custom_integrations: None,
+    hass_ws_client,
+) -> None:
+    """The asset_manager/get_areas WS command returns areas and asset→area map."""
+    from homeassistant.helpers import area_registry as ar
+
+    await _setup_integration(hass, enable_custom_integrations)
+    await _assets_collection(hass).async_create_item({"name": "Car"})
+    await hass.async_block_till_done()
+    ar.async_get(hass).async_create("Garage")
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "asset_manager/get_areas"})
+    response = await client.receive_json()
+    assert response["success"] is True
+    result = response["result"]
+    assert any(a["name"] == "Garage" for a in result["areas"])
+    assert "car" in result["asset_areas"]
+    assert result["asset_areas"]["car"] is None
 
 
 async def test_ws_create_entity(

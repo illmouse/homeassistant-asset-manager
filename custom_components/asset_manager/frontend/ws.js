@@ -25,8 +25,8 @@ export const templateUpdate = (hass, id, patch) =>
   wsCall(hass, `${wsPrefix("templates")}/update`, { template_id: id, ...patch });
 export const templateDelete = (hass, id) =>
   wsCall(hass, `${wsPrefix("templates")}/delete`, { template_id: id });
-export const createAsset = (hass, name) =>
-  wsCall(hass, `${wsPrefix("assets")}/create`, { name });
+export const createAsset = (hass, name, extra = {}) =>
+  wsCall(hass, `${wsPrefix("assets")}/create`, { name, ...extra });
 export const updateAsset = (hass, id, patch) =>
   wsCall(hass, `${wsPrefix("assets")}/update`, { asset_id: id, ...patch });
 export const deleteAsset = (hass, id) =>
@@ -44,3 +44,6 @@ export const applyTemplate = (hass, assetId, templateId) =>
   });
 export const cloneAsset = (hass, sourceId, name) =>
   wsCall(hass, `${DOMAIN}/clone_asset`, { source_asset_id: sourceId, name });
+export const getAreas = (hass) => wsCall(hass, `${DOMAIN}/get_areas`);
+export const updateArea = (hass, assetId, areaId) =>
+  wsCall(hass, `${DOMAIN}/update_area`, { asset_id: assetId, area_id: areaId });

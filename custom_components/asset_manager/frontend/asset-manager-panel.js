@@ -30,6 +30,8 @@
  *   asset_manager/templates/{list,create,update,delete,subscribe}
  *   asset_manager/apply_template
  *   asset_manager/clone_asset
+ *   asset_manager/get_areas
+ *   asset_manager/update_area
  *
  * Subscribe events deliver change-set payloads:
  *   [{change_type:"added"|"updated"|"removed", asset_id|entity_id|template_id, item}]

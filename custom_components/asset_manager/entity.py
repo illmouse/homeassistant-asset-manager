@@ -173,7 +173,7 @@ class AssetSensorEntity(AssetEntityMixin, SensorEntity):
     @override
     def _restore_from_last_state(self, state: str | None) -> None:
         """Restore the sensor value from the last state."""
-        if state is None:
+        if state is None or state in ("unknown", "unavailable"):
             return
         try:
             self._attr_native_value = float(state)
@@ -408,7 +408,7 @@ class AssetDerivedEntity(AssetEntityMixin, SensorEntity):
     @override
     def _restore_from_last_state(self, state: str | None) -> None:
         """Restore the last computed value from the persisted state."""
-        if state is None:
+        if state is None or state in ("unknown", "unavailable"):
             return
         parsed = _parse_date(state)
         if parsed is not None:

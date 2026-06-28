@@ -26,7 +26,7 @@ export const STYLES = `
             padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;
             transition: opacity .15s ease, filter .15s ease; }
   .am-btn:hover { filter: brightness(1.08); }
-  .am-btn.secondary { background: var(--secondary-background-color, #888); color: #fff; }
+  .am-btn.secondary { background: var(--secondary-background-color, #888); color: var(--primary-text-color, #fff); }
   .am-btn.danger { background: var(--error-state-color, #db4437); }
   .am-btn[disabled] { opacity: .5; cursor: not-allowed; filter: none; }
   .am-input, .am-select, .am-textarea {
@@ -123,6 +123,10 @@ export const STYLES = `
                  background: var(--card-background-color, #fff); transition: all .15s ease; }
   .am-tag-chip.active { background: var(--primary-color, #03a9f4); color: #fff;
                         border-color: var(--primary-color, #03a9f4); }
+
+  /* Area picker: a themed <select> + an optional "no area" reset. Reuses
+     .am-select so it tracks the theme's input styling. */
+  .am-area-picker { display: flex; flex-direction: column; gap: 4px; }
 
   /* Entity / template editor */
   .am-config-section { margin-top: 12px; }

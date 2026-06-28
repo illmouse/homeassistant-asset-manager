@@ -3,14 +3,15 @@
  *
  * Five Promise-free modal builders (they call back into the caller on
  * success instead of returning values):
- *   - assetCreateDialog       — name + optional template to seed entities
+ *   - assetCreateDialog       — name + icon + area + optional template
  *   - cloneDialog             — clone an existing asset under a new name
  *   - templatePickerDialog    — apply a template to an existing asset
  *   - entityEditorDialog      — kind-aware create/edit of one entity
  *   - templateEditorDialog    — full entity-spec list editor for templates
  *
- * Every dialog uses `openModal`/`withBusy`/`showToast` from `ui.js` and
- * the kind-aware config builder from `config-fields.js`.
+ * Every dialog uses `openModal`/`withBusy`/`showToast` from `ui.js`,
+ * the kind-aware config builder from `config-fields.js`, and the
+ * reusable icon/area pickers from `pickers.js`.
  */
 
 import { h, clear } from "./dom.js";
@@ -26,14 +27,20 @@ import {
   deleteEntity,
   applyTemplate,
   cloneAsset,
+  updateArea,
 } from "./ws.js";
 import { showToast, openModal, confirmDialog, withBusy } from "./ui.js";
 import { buildConfigFields } from "./config-fields.js";
+import { buildIconPicker, buildAreaPicker } from "./pickers.js";
 
-// Asset creation dialog: name + optional template. When a template is
-// selected, create the asset then apply the template in sequence.
+// Asset creation dialog: name + icon + area + optional template. When a
+// template is selected, create the asset then apply the template in
+// sequence. Area is applied after the asset exists (the device is
+// created by the coordinator off the WS create event).
 export function assetCreateDialog(hass, onCreated) {
   const nameInput = h("input", { class: "am-input", placeholder: "Asset name (e.g. My Car)" });
+  const iconPicker = buildIconPicker();
+  const areaPicker = buildAreaPicker(hass, null, null);
   const templateSelect = h("select", { class: "am-select" },
     h("option", { value: "" }, "Blank asset — no template"));
   const err = h("div", { class: "am-error" });
@@ -43,6 +50,10 @@ export function assetCreateDialog(hass, onCreated) {
     h("h3", {}, "New asset"),
     h("div", { class: "am-field", style: "margin-bottom:12px" },
       h("label", {}, "Name"), nameInput),
+    h("div", { class: "am-field", style: "margin-bottom:12px" },
+      h("label", {}, "Icon"), iconPicker.container),
+    h("div", { class: "am-field", style: "margin-bottom:12px" },
+      h("label", {}, "Area"), areaPicker.container),
     h("div", { class: "am-field", style: "margin-bottom:12px" },
       h("label", {}, "Start from template"), templateSelect),
     err,
@@ -62,14 +73,22 @@ export function assetCreateDialog(hass, onCreated) {
     const name = nameInput.value.trim();
     if (!name) { nameInput.focus(); return; }
     const templateId = templateSelect.value;
+    const icon = iconPicker.get() || undefined;
+    const areaId = areaPicker.get();
     err.textContent = "";
     try {
       await withBusy(submit, async () => {
-        const asset = await createAsset(hass, name);
+        const asset = await createAsset(hass, name, icon ? { icon } : {});
         if (templateId) {
           try { await applyTemplate(hass, asset.id, templateId); }
           catch (e) {
             showToast(`Asset created, but template failed: ${e.message || e}`, "error", 6000);
+          }
+        }
+        if (areaId) {
+          try { await updateArea(hass, asset.id, areaId); }
+          catch (e) {
+            showToast(`Asset created, but area assign failed: ${e.message || e}`, "error", 6000);
           }
         }
         modal.remove();
@@ -157,11 +176,16 @@ export function entityEditorDialog(hass, asset, entity, onSaved) {
   const kind = h("select", { class: "am-select" },
     ...ENTITY_KINDS.map((k) => h("option", { value: k, selected: entity?.kind === k }, k)));
   const unit = h("input", { class: "am-input", value: entity?.unit_of_measurement || "", placeholder: "km, °C, …" });
-  const icon = h("input", { class: "am-input", value: entity?.icon || "", placeholder: "mdi:counter" });
-  const enabledLabel = h("label", { style: "display:flex; align-items:center; gap:8px; cursor:pointer" });
-  const enabledInput = h("input", { type: "checkbox", class: "am-checkbox" });
+  const iconPicker = buildIconPicker(entity?.icon || "");
+  const useNativeEnabled = customElements.get("ha-switch") && customElements.get("ha-formfield");
+  const enabledInput = useNativeEnabled
+    ? document.createElement("ha-switch")
+    : h("input", { type: "checkbox", class: "am-checkbox" });
   enabledInput.checked = entity ? entity.enabled : true;
-  enabledLabel.append(enabledInput, h("span", {}, "Enabled"));
+  const enabledLabel = useNativeEnabled
+    ? (() => { const ff = document.createElement("ha-formfield"); ff.label = "Enabled"; ff.append(enabledInput); return ff; })()
+    : h("label", { style: "display:flex; align-items:center; gap:8px; cursor:pointer" },
+        enabledInput, h("span", {}, "Enabled"));
   const valueInput = h("input", { class: "am-input",
     value: entity?.value == null ? "" : String(entity.value), placeholder: "initial value" });
 
@@ -194,8 +218,8 @@ export function entityEditorDialog(hass, asset, entity, onSaved) {
       h("div", { class: "am-field" }, h("label", {}, "Slug"), slug),
       h("div", { class: "am-field" }, h("label", {}, "Display name"), name),
       h("div", { class: "am-field" }, h("label", {}, "Kind"), kind),
-      h("div", { class: "am-field" }, h("label", {}, "Icon"), icon),
-      h("div", { class: "am-field" }, h("label", {}, "Enabled"), enabledLabel),
+      h("div", { class: "am-field" }, h("label", {}, "Icon"), iconPicker.container),
+      enabledLabel,
       unitHolder),
     configHolder,
     valueHolder,
@@ -212,7 +236,8 @@ export function entityEditorDialog(hass, asset, entity, onSaved) {
       enabled: enabledInput.checked,
       config: configFields.read(),
     };
-    if (icon.value.trim()) payload.icon = icon.value.trim();
+    const iconVal = iconPicker.get();
+    if (iconVal) payload.icon = iconVal;
     if (KIND_HAS_UNIT.has(payload.kind) && unit.value.trim()) payload.unit_of_measurement = unit.value.trim();
     if (KIND_HAS_VALUE.has(payload.kind)) {
       const v = valueInput.value.trim();

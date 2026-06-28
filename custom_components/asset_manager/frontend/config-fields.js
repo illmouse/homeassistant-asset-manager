@@ -83,13 +83,22 @@ export const buildConfigFields = (kind, initialConfig) => {
   }
 
   if (kind === "derived") {
-    const formula = h("textarea", { class: "am-textarea",
-      placeholder: "e.g. datediff(oil_change_date, now())" });
+    const useNativeTa = customElements.get("ha-textarea");
+    const formula = useNativeTa
+      ? document.createElement("ha-textarea")
+      : h("textarea", { class: "am-textarea",
+          placeholder: "e.g. datediff(oil_change_date, now())" });
+    if (useNativeTa) {
+      formula.label = "Formula";
+      formula.placeholder = "e.g. datediff(oil_change_date, now())";
+      formula.resize = "vertical";
+      formula.style.width = "100%";
+    }
     formula.value = cfg.formula || "";
     const dc = h("input", { class: "am-input", value: cfg.device_class || "", placeholder: "device_class (optional)" });
     const sc = h("input", { class: "am-input", value: cfg.state_class || "", placeholder: "state_class (optional)" });
     container.append(
-      field("Formula", formula),
+      useNativeTa ? formula : field("Formula", formula),
       h("div", { class: "am-grid" }, field("Device class", dc), field("State class", sc)));
     return {
       container,

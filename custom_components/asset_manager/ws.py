@@ -7,6 +7,7 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import area_registry as ar
 from homeassistant.util import slugify
 
 from .const import DOMAIN
@@ -28,6 +29,20 @@ WS_CLONE_ASSET_SCHEMA = websocket_api.BASE_COMMAND_MESSAGE_SCHEMA.extend(
     }
 )
 
+WS_GET_AREAS_SCHEMA = websocket_api.BASE_COMMAND_MESSAGE_SCHEMA.extend(
+    {
+        vol.Required("type"): "asset_manager/get_areas",
+    }
+)
+
+WS_UPDATE_AREA_SCHEMA = websocket_api.BASE_COMMAND_MESSAGE_SCHEMA.extend(
+    {
+        vol.Required("type"): "asset_manager/update_area",
+        vol.Required("asset_id"): str,
+        vol.Required("area_id"): vol.Any(str, None),
+    }
+)
+
 
 @callback
 def async_register_bespoke_commands(
@@ -45,6 +60,18 @@ def async_register_bespoke_commands(
         "asset_manager/clone_asset",
         websocket_api.async_response(ws_clone_asset),
         WS_CLONE_ASSET_SCHEMA,
+    )
+    websocket_api.async_register_command(
+        hass,
+        "asset_manager/get_areas",
+        websocket_api.async_response(ws_get_areas),
+        WS_GET_AREAS_SCHEMA,
+    )
+    websocket_api.async_register_command(
+        hass,
+        "asset_manager/update_area",
+        websocket_api.async_response(ws_update_area),
+        WS_UPDATE_AREA_SCHEMA,
     )
 
 
@@ -130,3 +157,41 @@ async def ws_clone_asset(
         created_entities.append(entity.as_dict())
 
     connection.send_result(msg["id"], {"asset_id": new_asset.id, "entities": created_entities})
+
+
+async def ws_get_areas(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return the area registry and the current area_id for each asset device."""
+    coordinator: AssetManagerCoordinator = hass.data[DOMAIN]["coordinator"]
+    registry = ar.async_get(hass)
+    areas = [{"area_id": area.id, "name": area.name} for area in registry.areas.values()]
+    areas.sort(key=lambda a: a["name"])
+    asset_areas: dict[str, str | None] = {}
+    for asset_id in coordinator.assets.data:
+        device = coordinator.dev_reg.async_get_device({(DOMAIN, asset_id)})
+        asset_areas[asset_id] = device.area_id if device else None
+    connection.send_result(msg["id"], {"areas": areas, "asset_areas": asset_areas})
+
+
+async def ws_update_area(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Assign an asset's device to an area (or clear it with None)."""
+    coordinator: AssetManagerCoordinator = hass.data[DOMAIN]["coordinator"]
+    asset_id: str = msg["asset_id"]
+    area_id: str | None = msg["area_id"]
+
+    if asset_id not in coordinator.assets.data:
+        connection.send_error(msg["id"], "asset_manager/not_found", f"Asset {asset_id} not found")
+        return
+
+    device = coordinator.dev_reg.async_get_device({(DOMAIN, asset_id)})
+    if device is None:
+        connection.send_error(
+            msg["id"], "asset_manager/no_device", f"Device for asset {asset_id} not found"
+        )
+        return
+
+    coordinator.dev_reg.async_update_device(device.id, area_id=area_id)
+    connection.send_result(msg["id"], {"asset_id": asset_id, "area_id": area_id})

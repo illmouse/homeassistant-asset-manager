@@ -74,6 +74,12 @@ export const withBusy = async (triggerEl, fn, { errorToast = true } = {}) => {
 };
 
 export const makeSwitch = (checked, onChange) => {
+  if (customElements.get("ha-switch")) {
+    const sw = document.createElement("ha-switch");
+    sw.checked = !!checked;
+    sw.addEventListener("change", () => onChange(sw.checked));
+    return sw;
+  }
   const input = h("input", { type: "checkbox", class: "am-switch-input" });
   if (checked) input.checked = true;
   input.addEventListener("change", () => onChange(input.checked));

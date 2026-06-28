@@ -12,22 +12,29 @@ templates, cloning, and derived sensors — fully UI-driven, no YAML.
 - Implementation process: `documentation/implementation_process.md`
 - Dev environment: `documentation/devcontainer-setup.md`
 
-## "Proceed to next phase" workflow
-When the user says "proceed to next phase" (or similar), follow the
+## "Proceed to next task" workflow
+When the user says "proceed to next task" (or similar), follow the
 process in `documentation/implementation_process.md` verbatim. Summary:
-1. Orient: read `implementation_plan.md` (first non-`✅ DONE` phase),
-   the target phase section of `implementation_progress.md`, and the
-   relevant existing source under `custom_components/asset_manager/`.
+1. Orient: read `implementation_plan.md` (next unchecked MVP item or
+   agreed post-MVP feature), the cross-phase notes in
+   `implementation_progress.md`, and the relevant existing source under
+   `custom_components/asset_manager/`.
 2. Plan + implement to ~95% confidence, matching existing patterns.
-3. Verify inside the devcontainer (`loving_sutherland`) — the host
-   venv is broken:
-   `docker exec -w /workspaces/homeassistant-asset-manager loving_sutherland
-   bash -lc 'source .venv/bin/activate && ruff check . && ruff format .
-   && pytest tests/components/asset_manager/ -q'`.
-4. Record in `implementation_progress.md` (status, Result, Session log)
-   and mark `✅ DONE (commit <sha>)` in `implementation_plan.md`.
-5. Update the Phase tracker below.
-6. Commit from inside the container so the pre-commit hook runs.
+3. Verify **on the host** (not in the HA container — the official image
+   has no dev tooling):
+   ```
+   source .venv/bin/activate
+   ruff check . && ruff format . && pytest tests/components/asset_manager/ -q
+   node --check custom_components/asset_manager/frontend/*.js
+   ```
+   The HA container (`dev/compose.yml`) is only for running HA itself,
+   not for lint/tests.
+4. Record in `implementation_progress.md` (check off item, add Session
+   log entry).
+5. Update the Phase tracker below if a phase boundary moved.
+6. Commit from the host so the pre-commit hook runs. If pre-commit is
+   not installed on the host, run `ruff check . && ruff format .`
+   manually before committing.
 
 ## Layout
 ```
@@ -59,8 +66,15 @@ frontend_extra/asset_manager/      # Settings panel source
 ```
 
 ## Build & test commands
+
+> **Run lint and tests on the host**, not inside the devcontainer. The
+> container (`loving_sutherland`) has no network and its `.venv` lacks
+> ruff/pytest — it is only for running HA itself (`hass -c config`).
+
 ```bash
-# Activate venv (created by script/setup in the devcontainer)
+# Activate host venv (Python 3.13 + HA 2026.2.3). If missing, recreate:
+#   python3.13 -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements_test.txt ruff homeassistant==2026.2.3
 source .venv/bin/activate
 
 # Lint (matches HA core style)
@@ -101,12 +115,13 @@ hass -c config
 ## Fast iteration loop
 HA caches Python imports, so most changes require restarting HA:
 1. Edit code under `custom_components/asset_manager/`.
-2. Ctrl+C the running `hass -c config` process.
-3. Restart with `hass -c config` (~3-5s on a warm container).
-4. For entity/coordinator-only changes, **Settings → Devices & Services →
-   Asset Manager → ⋮ → Reload** avoids a full restart.
-5. Watch logs in a second terminal: `tail -f config/home-assistant.log`.
-   `config/configuration.yaml` sets `custom_components.asset_manager: debug`.
+2. `docker compose -f dev/compose.yml restart` (~5-10s on a warm
+   container).
+3. For entity/coordinator-only changes, **Settings → Devices & Services
+   → Asset Manager → ⋮ → Reload** avoids a full restart.
+4. Frontend-only changes (under `frontend/`): hard-refresh the browser.
+5. Watch logs: `docker compose -f dev/compose.yml logs -f` or
+   `tail -f dev/config/home-assistant.log`.
 
 ## Coding conventions (match HA core)
 - Python 3.14+, async-first, type hints everywhere.
@@ -141,4 +156,5 @@ HA caches Python imports, so most changes require restarting HA:
 - [x] Phase 2 — Templates + Clone
 - [x] Phase 3 — Derived sensors
 - [x] Phase 4 — Frontend panel
-- [ ] Phase 5 — Polish & release
+- [~] MVP close-out — template CRUD editor, error UX, README, hacs.json, backup note
+- [ ] Post-MVP — refactor + new features (see implementation_plan.md)
