@@ -21,7 +21,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          notes="$(git tag -l --format='%(contents)' "$tag")"
+          notes="$(git for-each-ref --format='%(contents)' "refs/tags/$tag")"
           gh release create "$tag" \
             --title "$tag" \
             --notes "$notes" \
