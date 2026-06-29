@@ -5,6 +5,47 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] — 2026-06-29
+
+Patch release: critical bug fixes and UI polish from production
+feedback.
+
+### Fixed
+
+- **Blinking asset list / `unknown_command` error (critical)** — the
+  panel subscribed to the HA event-bus event `label_registry_updated`
+  via `subscribeMessage` (reserved for WS commands), causing an
+  infinite re-subscribe loop that blinked the list and periodically
+  reloaded the page. Now uses the correct `subscribeEvents` API.
+- **Icon rendered as literal text** — the empty-state icon
+  `mdi:package-variant-closed` showed as text instead of a glyph.
+  Now rendered via `<ha-icon>`.
+- **No icon picker in label dialog** — the "add new tag" dialog used a
+  plain text input for the icon. Now uses HA's native `<ha-icon-picker>`.
+
+### Changed
+
+- **device_class / state_class dropdowns** — sensor and derived entity
+  config now uses dropdowns populated from HA's closed enums
+  (`SensorDeviceClass`, `SensorStateClass`) instead of free-form text
+  fields.
+- **Repo restructuring** — dev tooling moved under `dev/`
+  (`dev/scripts/`, `dev/compose.yml` now tracked); `dev/config/` and
+  `dev/diagnostics/` remain gitignored. Removed obsolete
+  `implementation_*.md` docs and redundant root `conftest.py`.
+
+### Added
+
+- **Release process documentation** — `llm_wiki/release.md` documents
+  versioning rules, pre-release checklist, and cutting a release.
+
+### Technical
+
+- 97 tests passing (up from 91). ruff clean; all frontend JS passes
+  `node --check`.
+
+[0.1.1]: https://github.com/illmouse/homeassistant-asset-manager/releases/tag/v0.1.1
+
 ## [0.1.0] — 2026-06-29
 
 First public release. Asset Manager is a custom Home Assistant

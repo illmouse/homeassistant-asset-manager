@@ -23,6 +23,7 @@ import { labelColorToCss } from "./constants.js";
 import { listLabels, createLabel } from "./ws.js";
 import { showToast, withBusy } from "./ui.js";
 import { haInput, haSelect } from "./native-fields.js";
+import { buildIconPicker } from "./pickers.js";
 
 const chipStyle = (color) => {
   const css = labelColorToCss(color);
@@ -74,14 +75,14 @@ export function buildLabelPicker(hass, initialLabelIds = [], onChange = null) {
     onselected: (v) => { colorSelect._value = v || ""; },
   });
   colorSelect._value = "";
-  const iconInput = haInput({ placeholder: "mdi:tag (optional)" });
+  const iconPicker = buildIconPicker("");
   const createBtn = h("button", { class: "am-btn" }, "Create label");
   const createErr = h("div", { class: "am-error" });
   const createForm = h("div", { class: "am-label-create" },
     h("div", { class: "am-field" }, h("label", {}, "Name"), nameInput),
     h("div", { style: "display:grid; grid-template-columns:1fr 1fr; gap:6px" },
       h("div", { class: "am-field" }, h("label", {}, "Color"), colorSelect),
-      h("div", { class: "am-field" }, h("label", {}, "Icon"), iconInput)),
+      h("div", { class: "am-field" }, h("label", {}, "Icon"), iconPicker.container)),
     createBtn,
     createErr);
 
@@ -221,7 +222,7 @@ export function buildLabelPicker(hass, initialLabelIds = [], onChange = null) {
       await withBusy(createBtn, async () => {
         const payload = { name };
         if (colorSelect._value) payload.color = colorSelect._value;
-        if (iconInput.value.trim()) payload.icon = iconInput.value.trim();
+        if (iconPicker.get()) payload.icon = iconPicker.get();
         await createLabel(hass, payload);
         await refreshLabels();
         const created = allLabels.find((l) => l.name === name);
@@ -236,7 +237,7 @@ export function buildLabelPicker(hass, initialLabelIds = [], onChange = null) {
         nameInput.value = "";
         colorSelect._value = "";
         if (customElements.get("ha-select")) colorSelect.value = "";
-        iconInput.value = "";
+        iconPicker.set("");
         renderCreateVisibility();
         searchInput.focus();
       });

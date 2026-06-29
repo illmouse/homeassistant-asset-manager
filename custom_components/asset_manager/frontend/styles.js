@@ -99,7 +99,7 @@ export const STYLES = `
               border-radius: 4px; background: rgba(219,68,55,.06); }
   .am-error:empty { display: none; }
   .am-empty { text-align: center; padding: 32px 16px; color: var(--secondary-text-color, #888); }
-  .am-empty .am-empty-icon { font-size: 40px; margin-bottom: 8px; opacity: .5; }
+  .am-empty ha-icon { --mdc-icon-size: 40px; display: block; margin: 0 auto 8px; opacity: .5; }
   .am-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
   .am-toolbar .am-grow { flex: 1 1 200px; }
   .am-entity-summary { display: flex; flex-direction: column; line-height: 1.35; min-width: 0; }

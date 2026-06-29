@@ -23,6 +23,15 @@ export const wsCall = async (hass, type, data = {}) => {
 export const wsSubscribe = (hass, type, onEvent) =>
   hass.connection.subscribeMessage(onEvent, { type });
 
+// Subscribe to HA event-bus events (fired via hass.bus.async_fire*).
+// These are NOT WS commands — `subscribeEvents` sends
+// {type: "subscribe_events", event_type} which is HA's general event
+// subscription mechanism. Use this for events like "label_registry_updated"
+// that registries fire internally; use wsSubscribe for ObservableCollection
+// change-set streams exposed as bespoke WS commands.
+export const wsSubscribeEvents = (hass, eventType, onEvent) =>
+  hass.connection.subscribeEvents(onEvent, eventType);
+
 export const assetList = (hass) => wsCall(hass, `${wsPrefix("assets")}/list`);
 export const entityList = (hass) => wsCall(hass, `${wsPrefix("entities")}/list`);
 export const templateList = (hass) => wsCall(hass, `${wsPrefix("templates")}/list`);

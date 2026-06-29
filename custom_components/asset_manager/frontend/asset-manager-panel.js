@@ -51,6 +51,7 @@ import {
   getAssetLabels,
   getAreas,
   wsSubscribe,
+  wsSubscribeEvents,
 } from "./ws.js";
 import {
   renderListView,
@@ -154,9 +155,12 @@ class AssetManagerPanel extends HTMLElement {
       onEvent("entities", "entity_id")));
     this._subs.push(await wsSubscribe(hass, `${wsPrefix("templates")}/subscribe`,
       onEvent("templates", "template_id")));
-    // Native HA label registry updates (create/update/delete). Refresh
-    // the label registry map and re-render so chips/colors stay current.
-    this._subs.push(await wsSubscribe(hass, "label_registry_updated",
+    // Native HA label registry updates (create/update/delete). The
+    // label registry fires "label_registry_updated" on the HA event
+    // bus (hass.bus.async_fire_internal), not as a WS command, so we
+    // subscribe via subscribeEvents. Refresh the label registry map
+    // and re-render so chips/colors stay current.
+    this._subs.push(await wsSubscribeEvents(hass, "label_registry_updated",
       async () => {
         try {
           const fresh = await listLabels(hass);

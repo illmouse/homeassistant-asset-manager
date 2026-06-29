@@ -8,6 +8,8 @@ templates, cloning, and derived sensors — fully UI-driven, no YAML.
 - Vision & overview: `documentation/draft_architecture.md`
 - Architecture: `documentation/architecture.md`
 - Dev environment: `documentation/dev-environment-setup.md`
+- Release process: `llm_wiki/release.md`
+- Agent docs index: `llm_wiki/`
 
 ## Verification
 1. Implement to ~95% confidence, matching existing patterns.
@@ -50,6 +52,7 @@ custom_components/asset_manager/   # the integration (ships to HA)
     views.js                 # 3 view renderers (list/detail/templates)
 tests/components/asset_manager/    # pytest (mirrors HA core layout)
 documentation/                     # architecture + plans
+llm_wiki/                          # agent-facing docs (release process, …)
 dev/                               # local HA dev environment (tracked + gitignored)
   compose.yml                      # docker compose stack (HA service) — tracked
   scripts/                         # dev tooling (setup, bootstrap, test_integration) — tracked

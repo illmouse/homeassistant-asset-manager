@@ -37,7 +37,7 @@ import { haInput, haSelect } from "./native-fields.js";
 
 export const renderEmptyState = (icon, title, body) =>
   h("div", { class: "am-empty" },
-    h("div", { class: "am-empty-icon" }, icon),
+    h("ha-icon", { icon }),
     h("div", { style: "font-weight:500; margin-bottom:4px" }, title),
     h("div", {}, body));
 
