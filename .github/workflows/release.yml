@@ -12,16 +12,19 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          notes="$(git for-each-ref --format='%(contents)' "refs/tags/$tag")"
+          # Fetch the annotated tag object to get its message
+          tag_sha=$(gh api repos/${{ github.repository }}/git/refs/tags/"$tag" --jq '.object.sha')
+          tag_type=$(gh api repos/${{ github.repository }}/git/tags/"$tag_sha" --jq '.type')
+          if [ "$tag_type" = "tag" ]; then
+            notes=$(gh api repos/${{ github.repository }}/git/tags/"$tag_sha" --jq '.message')
+          else
+            notes="Release $tag"
+          fi
           gh release create "$tag" \
             --title "$tag" \
             --notes "$notes" \
