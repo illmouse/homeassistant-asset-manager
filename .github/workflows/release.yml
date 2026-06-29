@@ -12,17 +12,25 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch tag annotation
+        run: |
+          # actions/checkout may not fetch the annotated tag object.
+          # Fetch it explicitly from the remote.
+          git fetch origin --tags --force
+          tag="${GITHUB_REF#refs/tags/}"
+          git cat-file -t "$tag" || exit 1
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          # Fetch the annotated tag object to get its message
-          tag_sha=$(gh api repos/${{ github.repository }}/git/refs/tags/"$tag" --jq '.object.sha')
-          tag_type=$(gh api repos/${{ github.repository }}/git/tags/"$tag_sha" --jq '.type')
-          if [ "$tag_type" = "tag" ]; then
-            notes=$(gh api repos/${{ github.repository }}/git/tags/"$tag_sha" --jq '.message')
-          else
+          notes="$(git tag -l --format='%(contents)' "$tag")"
+          if [ -z "$notes" ]; then
             notes="Release $tag"
           fi
           gh release create "$tag" \
