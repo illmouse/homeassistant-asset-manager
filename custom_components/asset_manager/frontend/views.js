@@ -22,7 +22,7 @@ import {
   getAssetLabels,
   updateAssetLabels,
 } from "./ws.js";
-import { showToast, confirmDialog, withBusy, makeSwitch } from "./ui.js";
+import { showToast, confirmDialog, withBusy, makeSwitch, openModal } from "./ui.js";
 import {
   assetCreateDialog,
   cloneDialog,
@@ -32,6 +32,8 @@ import {
 } from "./dialogs.js";
 import { buildIconPicker, buildAreaPicker } from "./pickers.js";
 import { buildLabelPicker } from "./labelPicker.js";
+import { labelColorToCss } from "./constants.js";
+import { haInput, haSelect } from "./native-fields.js";
 
 export const renderEmptyState = (icon, title, body) =>
   h("div", { class: "am-empty" },
@@ -55,7 +57,7 @@ const LIST_COLUMNS = [
 ];
 
 const chipStyle = (color) => {
-  const css = color ? `var(--label-color-${color}, var(--state-active-color, #03a9f4))` : "";
+  const css = labelColorToCss(color);
   return css ? `border-color:${css}; color:${css};` : "";
 };
 
@@ -79,8 +81,12 @@ export function renderListView(panel) {
   // Build filter controls. We keep them mounted and only re-render
   // the list portion when the filter changes, so the search input keeps
   // focus and the caret position is preserved.
-  const search = h("input", { class: "am-input am-search", type: "search",
-    placeholder: "Search by name, manufacturer, or model…", value: panel._search });
+  const search = haInput({
+    type: "search",
+    placeholder: "Search by name, manufacturer, model, or serial…",
+    value: panel._search,
+    oninput: () => { panel._search = search.value; renderTable(); },
+  });
 
   // Column picker: a small dropdown with checkboxes for each column.
   const colPickerBtn = h("button", { class: "am-btn secondary am-col-picker-btn" }, "⚙ Columns");
@@ -122,72 +128,339 @@ export function renderListView(panel) {
   });
   const colPicker = h("div", { class: "am-col-picker" }, colPickerBtn, colPickerDropdown);
 
-  const sort = h("select", { class: "am-select am-sort" },
-    h("option", { value: "name", selected: panel._sort === "name" }, "Sort: Name"),
-    h("option", { value: "manufacturer", selected: panel._sort === "manufacturer" }, "Sort: Manufacturer"),
-    h("option", { value: "entities", selected: panel._sort === "entities" }, "Sort: Entity count"));
-  sort.addEventListener("change", () => { panel._sort = sort.value; renderTable(); });
+  const sort = haSelect({
+    value: panel._sort,
+    options: [
+      { value: "name", label: "Sort: Name" },
+      { value: "manufacturer", label: "Sort: Manufacturer" },
+      { value: "entities", label: "Sort: Entity count" },
+    ],
+    onselected: (v) => { panel._sort = v; renderTable(); },
+  });
 
-  // Filter dropdowns: one <select> per filterable property. They
-  // combine with AND alongside search + label chips. Each defaults to
-  // "All [prop]". Options are derived from distinct values across the
-  // current asset set.
+  // Filter definitions. Each filter has a `type`:
+  //   "text"        — supports pick-from-list (multi-select) and partial-match
+  //                   (free-text, case-insensitive .includes()) modes.
+  //   "categorical" — pick-from-list only (finite option set).
+  // State shape: panel._filters[prop] = null | { mode:"pick", values:Set }
+  //                                  | { mode:"match", text:string }.
   const filterDefs = [
-    { prop: "area", label: "All areas", options: () => {
+    { prop: "area", label: "area", type: "text", options: () => {
         const ids = [...new Set([...panel._assetAreas.values()].filter(Boolean))];
         return ids.map((id) => {
           const area = panel._hass.areas && panel._hass.areas[id];
           return { value: id, label: area ? (area.name || id) : id };
         }).sort((a, b) => a.label.localeCompare(b.label));
-      }, match: (a, v) => (panel._assetAreas.get(a.id) || null) === v },
-    { prop: "manufacturer", label: "All manufacturers", options: () => {
+      }, match: (a, f) => {
+        const av = panel._assetAreas.get(a.id) || "";
+        if (f.mode === "pick") return f.values.has(av);
+        return av.toLowerCase().includes(f.text.toLowerCase());
+      } },
+    { prop: "manufacturer", label: "manufacturer", type: "text", options: () => {
         const vals = [...new Set([...panel._assets.values()]
           .map((a) => a.manufacturer).filter(Boolean))].sort();
         return vals.map((v) => ({ value: v, label: v }));
-      }, match: (a, v) => a.manufacturer === v },
-    { prop: "model", label: "All models", options: () => {
+      }, match: (a, f) => {
+        const av = a.manufacturer || "";
+        if (f.mode === "pick") return f.values.has(av);
+        return av.toLowerCase().includes(f.text.toLowerCase());
+      } },
+    { prop: "model", label: "model", type: "text", options: () => {
         const vals = [...new Set([...panel._assets.values()]
           .map((a) => a.model).filter(Boolean))].sort();
         return vals.map((v) => ({ value: v, label: v }));
-      }, match: (a, v) => a.model === v },
-    { prop: "serial", label: "All serials", options: () => {
-        const vals = [...new Set([...panel._assets.values()]
-          .map((a) => a.serial).filter(Boolean))].sort();
-        return vals.map((v) => ({ value: v, label: v }));
-      }, match: (a, v) => a.serial === v },
-    { prop: "entities", label: "Any count", options: () => [
+      }, match: (a, f) => {
+        const av = a.model || "";
+        if (f.mode === "pick") return f.values.has(av);
+        return av.toLowerCase().includes(f.text.toLowerCase());
+      } },
+    { prop: "entities", label: "entity count", type: "categorical", options: () => [
         { value: "0", label: "0 entities" },
         { value: "1-5", label: "1-5 entities" },
         { value: "6+", label: "6+ entities" },
-      ], match: (a, v) => {
+      ], match: (a, f) => {
         const n = [...panel._entities.values()].filter((e) => e.asset_id === a.id).length;
-        if (v === "0") return n === 0;
-        if (v === "1-5") return n >= 1 && n <= 5;
-        if (v === "6+") return n >= 6;
+        for (const v of f.values) {
+          if (v === "0" && n === 0) return true;
+          if (v === "1-5" && n >= 1 && n <= 5) return true;
+          if (v === "6+" && n >= 6) return true;
+        }
         return false;
-      }},
-    { prop: "icon", label: "Any", options: () => [
+      } },
+    { prop: "icon", label: "icon", type: "categorical", options: () => [
         { value: "yes", label: "With icon" },
         { value: "no", label: "Without icon" },
-      ], match: (a, v) => v === "yes" ? !!a.icon : !a.icon },
+      ], match: (a, f) => {
+        for (const v of f.values) {
+          if (v === "yes" && !!a.icon) return true;
+          if (v === "no" && !a.icon) return true;
+        }
+        return false;
+      } },
+    { prop: "labels", label: "labels", type: "text", options: () => {
+        const out = [...panel._labelRegistry.values()].sort((a, b) =>
+          (a.name || "").localeCompare(b.name || ""));
+        return out.map((l) => ({ value: l.label_id, label: l.name || l.label_id }));
+      }, match: (a, f) => {
+        const ids = panel._assetLabels.get(a.id) || [];
+        if (f.mode === "pick") return ids.some((id) => f.values.has(id));
+        const q = f.text.toLowerCase();
+        return ids.some((id) => {
+          const meta = panel._labelRegistry.get(id);
+          return ((meta && meta.name) || id).toLowerCase().includes(q);
+        });
+      } },
   ];
-  const filterSelects = filterDefs.map((fd) => {
-    const opts = fd.options();
-    // Sanitize: if the stored selection is no longer in options, reset.
-    if (panel._filters[fd.prop] && !opts.some((o) => o.value === panel._filters[fd.prop])) {
-      panel._filters[fd.prop] = null;
-    }
-    const sel = h("select", { class: "am-select am-filter-select" },
-      h("option", { value: "" }, fd.label),
-      ...opts.map((o) => h("option", {
-        value: o.value,
-        selected: (panel._filters[fd.prop] || "") === o.value ? true : null,
-      }, o.label)));
-    sel.addEventListener("change", () => {
-      panel._filters[fd.prop] = sel.value || null;
-      renderTable();
+
+  // Active check: pick→non-empty Set, match→non-empty trimmed text.
+  const isFilterActive = (fd) => {
+    const f = panel._filters[fd.prop];
+    if (!f) return false;
+    if (f.mode === "pick") return f.values.size > 0;
+    return !!f.text.trim();
+  };
+
+  // Sanitize stored pick-mode selections against current options (a value
+  // may no longer be present after assets are added/removed). Match-mode
+  // filters need no sanitization.
+  for (const fd of filterDefs) {
+    const f = panel._filters[fd.prop];
+    if (!f || f.mode !== "pick") continue;
+    const optIds = new Set(fd.options().map((o) => o.value));
+    for (const v of [...f.values]) if (!optIds.has(v)) f.values.delete(v);
+    if (f.values.size === 0) panel._filters[fd.prop] = null;
+  }
+
+  // Filter button: opens a modal with one row per filterable property.
+  const filterBtnLabel = () => {
+    const n = filterDefs.filter((fd) => isFilterActive(fd)).length;
+    return n ? `Filters (${n})` : "Filters";
+  };
+  const filterBtn = h("button", { class: "am-btn secondary am-filter-btn" }, filterBtnLabel());
+  const refreshFilterBtn = () => { filterBtn.textContent = filterBtnLabel(); };
+
+  // Build the multi-select combobox (single-line input with chips +
+  // dropdown, reusing .am-label-combobox* CSS). Returns { container, sync() }.
+  const buildFilterCombobox = (fd) => {
+    const f = panel._filters[fd.prop];
+    const selected = (f && f.mode === "pick") ? f.values : new Set();
+    let allOpts = fd.options();
+    let searchTerm = "";
+    let dropdownOpen = false;
+
+    const searchInput = h("input", {
+      class: "am-label-combobox-text",
+      placeholder: selected.size ? "" : `Filter by ${fd.label}…`,
+      value: "",
     });
-    return sel;
+    const chipsHolder = h("span", { class: "am-label-combobox-chips" });
+    const affordance = h("span", { class: "am-label-combobox-arrow" }, "▾");
+    const combobox = h("div", { class: "am-label-combobox" },
+      chipsHolder, searchInput, affordance);
+    const optionsList = h("div", { class: "am-label-options" });
+    // position:fixed so the dropdown escapes the modal's overflow:auto.
+    // Toggled via append/remove to document.body; no inline display style.
+    const dropdown = h("div", {
+      class: "am-label-dropdown am-filter-dropdown",
+      style: "position:fixed",
+    }, optionsList);
+
+    const ensureFilter = () => {
+      let cur = panel._filters[fd.prop];
+      if (!cur || cur.mode !== "pick") {
+        cur = { mode: "pick", values: new Set() };
+        panel._filters[fd.prop] = cur;
+      }
+      return cur;
+    };
+    const optLabel = (v) => {
+      const o = allOpts.find((o) => o.value === v);
+      return o ? o.label : v;
+    };
+
+    const renderChips = () => {
+      clear(chipsHolder);
+      for (const v of selected) {
+        chipsHolder.append(h("span", {
+          class: "am-label-chip",
+          style: "font-size:12px",
+        },
+          h("span", {}, optLabel(v)),
+          h("span", {
+            class: "am-label-chip-x",
+            title: "Remove",
+            onClick: (ev) => {
+              ev.stopPropagation();
+              selected.delete(v);
+              const cur = ensureFilter();
+              cur.values.delete(v);
+              renderChips();
+              if (dropdownOpen) { positionDropdown(); renderOptions(); }
+            },
+          }, "×")));
+      }
+      searchInput.placeholder = selected.size ? "" : `Filter by ${fd.label}…`;
+    };
+
+    const renderOptions = () => {
+      clear(optionsList);
+      const q = searchTerm.trim().toLowerCase();
+      const matching = allOpts.filter((o) => !q || o.label.toLowerCase().includes(q));
+      if (matching.length === 0) {
+        optionsList.append(h("p", { class: "am-muted", style: "margin:0 0 6px" },
+          q ? "No matches." : "No options."));
+        return;
+      }
+      for (const o of matching) {
+        const isSel = selected.has(o.value);
+        optionsList.append(h("div", {
+          class: `am-label-option${isSel ? " selected" : ""}`,
+          title: o.label,
+          onClick: () => {
+            if (isSel) selected.delete(o.value);
+            else selected.add(o.value);
+            const cur = ensureFilter();
+            if (isSel) cur.values.delete(o.value);
+            else cur.values.add(o.value);
+            renderChips();
+            renderOptions();
+          },
+        },
+          h("span", { class: "am-label-check" }, ""),
+          h("span", { class: "am-label-option-text" }, o.label)));
+      }
+    };
+
+    const positionDropdown = () => {
+      const r = combobox.getBoundingClientRect();
+      dropdown.style.left = `${r.left}px`;
+      dropdown.style.top = `${r.bottom + 4}px`;
+      dropdown.style.width = `${r.width}px`;
+      dropdown.style.minWidth = `${r.width}px`;
+    };
+
+    const openDropdown = () => {
+      if (dropdownOpen) return;
+      dropdownOpen = true;
+      allOpts = fd.options();
+      document.body.append(dropdown);
+      dropdown.style.display = "";
+      positionDropdown();
+      renderOptions();
+    };
+    const closeDropdown = () => {
+      if (!dropdownOpen) return;
+      dropdownOpen = false;
+      dropdown.remove();
+      searchTerm = "";
+      searchInput.value = "";
+      renderChips();
+    };
+
+    searchInput.addEventListener("focus", openDropdown);
+    searchInput.addEventListener("input", () => {
+      searchTerm = searchInput.value;
+      if (!dropdownOpen) openDropdown();
+      renderOptions();
+    });
+    combobox.addEventListener("click", (ev) => {
+      if (ev.target === affordance || ev.target === combobox) searchInput.focus();
+    });
+    const onOutside = (ev) => {
+      if (!dropdownOpen) return;
+      if (ev.composedPath().includes(combobox) ||
+          ev.composedPath().includes(dropdown)) return;
+      closeDropdown();
+    };
+    const onScrollOrResize = () => { if (dropdownOpen) positionDropdown(); };
+    document.addEventListener("click", onOutside);
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+
+    renderChips();
+    return {
+      container: h("div", { class: "am-label-picker" }, combobox),
+      sync: () => {
+        allOpts = fd.options();
+        renderChips();
+      },
+    };
+  };
+
+  // Build one filter row in the dialog.
+  const buildFilterRow = (fd) => {
+    const row = h("div", { class: "am-filter-dialog-row" },
+      h("label", { class: "am-filter-dialog-label" }, fd.label));
+
+    const holder = h("div", {});
+    row.append(holder);
+
+    const renderMode = () => {
+      clear(holder);
+      const f = panel._filters[fd.prop];
+
+      // Text filters get a mode toggle.
+      if (fd.type === "text") {
+        const curMode = (f && f.mode) || "pick";
+        const modeSel = haSelect({
+          value: curMode,
+          options: [
+            { value: "pick", label: "Pick from list" },
+            { value: "match", label: "Partial match" },
+          ],
+          onselected: (v) => {
+            if (v === "pick") panel._filters[fd.prop] = { mode: "pick", values: new Set() };
+            else panel._filters[fd.prop] = { mode: "match", text: "" };
+            renderMode();
+          },
+        });
+        holder.append(modeSel);
+      }
+
+      const mode = (f && f.mode) || "pick";
+      if (mode === "pick") {
+        holder.append(buildFilterCombobox(fd).container);
+      } else {
+        const inp = haInput({
+          type: "text",
+          placeholder: `Partial ${fd.label} match…`,
+          value: (f && f.text) || "",
+          oninput: () => {
+            let cur = panel._filters[fd.prop];
+            if (!cur || cur.mode !== "match") {
+              cur = { mode: "match", text: "" };
+              panel._filters[fd.prop] = cur;
+            }
+            cur.text = inp.value;
+          },
+        });
+        holder.append(inp);
+      }
+    };
+    renderMode();
+    return row;
+  };
+
+  filterBtn.addEventListener("click", () => {
+    const close = openModal(h("div", { class: "am-filter-dialog" },
+      h("div", { class: "am-modal-title" }, "Filter assets"),
+      ...filterDefs.map(buildFilterRow),
+      h("div", { class: "am-modal-actions" },
+        h("button", { class: "am-btn secondary", onClick: () => {
+          for (const fd of filterDefs) panel._filters[fd.prop] = null;
+          refreshFilterBtn();
+          renderTable();
+          close.remove();
+        }}, "Clear all"),
+        h("button", { class: "am-btn", onClick: () => {
+          refreshFilterBtn();
+          renderTable();
+          close.remove();
+        }}, "Apply"))
+    ));
+    close.addEventListener("click", (e) => {
+      if (e.target === close) { refreshFilterBtn(); renderTable(); }
+    });
   });
 
   // Label chips derived from all assets' device labels. We fetch the
@@ -195,22 +468,37 @@ export function renderListView(panel) {
   const labelsRow = h("div", { class: "am-tags" });
   const renderLabels = () => {
     clear(labelsRow);
-    const allLabelIds = [...new Set([...panel._assetLabels.values()]
-      .flatMap((ids) => ids || []))].sort((a, b) => {
+    const freq = new Map();
+    for (const ids of panel._assetLabels.values()) {
+      for (const lid of (ids || [])) freq.set(lid, (freq.get(lid) || 0) + 1);
+    }
+    const TOP_N = 10;
+    const nameCompare = (a, b) => {
       const na = (panel._labelRegistry.get(a) || {}).name || a;
       const nb = (panel._labelRegistry.get(b) || {}).name || b;
       return na.localeCompare(nb);
-    });
-    if (!allLabelIds.length) return;
-    for (const lid of allLabelIds) {
+    };
+    const sortedByFreq = [...freq.keys()].sort((a, b) =>
+      (freq.get(b) || 0) - (freq.get(a) || 0) || nameCompare(a, b));
+    let visible = sortedByFreq.slice(0, TOP_N);
+    for (const lid of panel._activeLabels) {
+      if (!visible.includes(lid)) visible.push(lid);
+    }
+    if (!visible.length) return;
+    for (const lid of visible) {
       const meta = panel._labelRegistry.get(lid) || {};
-      const active = panel._activeLabel === lid;
-      const css = meta.color ? `border-color:var(--label-color-${meta.color}, var(--state-active-color, #03a9f4)); color:var(--label-color-${meta.color}, var(--state-active-color, #03a9f4));` : "";
+      const active = panel._activeLabels.has(lid);
+      const css = chipStyle(meta.color);
       const chip = h("span", {
         class: `am-label-chip${active ? " active" : ""}`,
         style: active ? "" : css,
         title: meta.description || "",
-        onClick: () => { panel._activeLabel = active ? null : lid; renderTable(); renderLabels(); },
+        onClick: () => {
+          if (active) panel._activeLabels.delete(lid);
+          else panel._activeLabels.add(lid);
+          renderTable();
+          renderLabels();
+        },
       },
         meta.icon ? h("ha-icon", { icon: meta.icon, style: "margin-right:4px" }) : null,
         meta.name || lid);
@@ -223,16 +511,20 @@ export function renderListView(panel) {
   const tableHolder = h("div", { class: "am-table-scroll" });
   const renderTable = () => {
     const q = panel._search.trim().toLowerCase();
-    const labelId = panel._activeLabel;
+    const activeLabels = panel._activeLabels;
     let items = [...panel._assets.values()].filter((a) => {
-      if (labelId && !((panel._assetLabels.get(a.id) || []).includes(labelId))) return false;
+      if (activeLabels.size) {
+        const ids = panel._assetLabels.get(a.id) || [];
+        if (![...activeLabels].some((id) => ids.includes(id))) return false;
+      }
       if (!q) return true;
       return a.name.toLowerCase().includes(q) ||
         (a.manufacturer || "").toLowerCase().includes(q) ||
-        (a.model || "").toLowerCase().includes(q);
+        (a.model || "").toLowerCase().includes(q) ||
+        (a.serial || "").toLowerCase().includes(q);
     });
-    // Apply multi-property filter dropdowns (AND combination).
-    const activeFilters = filterDefs.filter((fd) => panel._filters[fd.prop]);
+    // Apply multi-property filters (AND combination; OR within each filter).
+    const activeFilters = filterDefs.filter((fd) => isFilterActive(fd));
     if (activeFilters.length) {
       items = items.filter((a) => activeFilters.every((fd) => fd.match(a, panel._filters[fd.prop])));
     }
@@ -251,8 +543,12 @@ export function renderListView(panel) {
     clear(tableHolder);
     if (!items.length) {
       const reasons = [];
-      if (labelId) reasons.push(`label “${(panel._labelRegistry.get(labelId) || {}).name || labelId}”`);
-      const active = filterDefs.filter((fd) => panel._filters[fd.prop]);
+      if (activeLabels.size) {
+        const names = [...activeLabels].map((id) =>
+          (panel._labelRegistry.get(id) || {}).name || id);
+        reasons.push(`label${activeLabels.size > 1 ? "s" : ""} ${names.map((n) => `“${n}”`).join(", ")}`);
+      }
+      const active = filterDefs.filter((fd) => isFilterActive(fd));
       if (active.length) reasons.push(`${active.length} filter${active.length > 1 ? "s" : ""}`);
       if (q) reasons.push(`search “${panel._search}”`);
       tableHolder.append(h("p", { class: "am-muted", style: "text-align:center" },
@@ -281,7 +577,7 @@ export function renderListView(panel) {
               col.label + indicator)
           : h("th", {}, col.label);
       }),
-      h("th", { class: "am-table-actions-th" }, "Actions"));
+      h("th", { class: "am-table-actions-th" }, ""));
 
     const tbodyRows = items.map((asset) => {
       const ents = entityCount(asset.id);
@@ -321,24 +617,26 @@ export function renderListView(panel) {
               }, meta.name || lid);
             });
             if (extra > 0) chips.push(h("span", { class: "am-muted" }, `+${extra}`));
-            return h("td", { class: "am-table-chips" }, ...chips);
+            return h("td", {}, h("div", { class: "am-table-chips" }, ...chips));
           }
           default:
             return h("td", {}, "");
         }
       });
-      cells.push(h("td", { class: "am-table-actions" },
-        h("button", { class: "am-btn secondary",
-          onClick: () => cloneDialog(hass, asset, () => {}) }, "Clone"),
-        h("button", { class: "am-btn danger", onClick: async () => {
-          const ok = await confirmDialog(`Delete asset “${asset.name}” and all its entities?`,
-            { danger: true, confirmLabel: "Delete" });
-          if (!ok) return;
-          try { await withBusy(null, async () => { await deleteAsset(hass, asset.id); });
-            showToast(`Deleted “${asset.name}”`, "success"); }
-          catch (e) { showToast(String(e.message || e), "error", 6000); }
-        }}, "Delete")));
-      return h("tr", {}, ...cells);
+        cells.push(h("td", {},
+        h("div", { class: "am-table-actions" },
+          h("button", { class: "am-btn secondary",
+            onClick: (ev) => { ev.stopPropagation(); cloneDialog(hass, asset, () => {}); } }, "Clone"),
+          h("button", { class: "am-btn danger", onClick: async (ev) => {
+            ev.stopPropagation();
+            const ok = await confirmDialog(`Delete asset “${asset.name}” and all its entities?`,
+              { danger: true, confirmLabel: "Delete" });
+            if (!ok) return;
+            try { await withBusy(null, async () => { await deleteAsset(hass, asset.id); });
+              showToast(`Deleted “${asset.name}”`, "success"); }
+            catch (e) { showToast(String(e.message || e), "error", 6000); }
+          }}, "Delete"))));
+      return h("tr", { class: "am-table-row", onClick: () => panel._goDetail(asset.id) }, ...cells);
     });
 
     tableHolder.append(h("table", { class: "am-table" },
@@ -346,13 +644,9 @@ export function renderListView(panel) {
       h("tbody", {}, ...tbodyRows)));
   };
 
-  search.addEventListener("input", () => {
-    panel._search = search.value;
-    renderTable();
-  });
   renderTable();
 
-  card.append(h("div", { class: "am-filters" }, search, ...filterSelects, colPicker), labelsRow, tableHolder);
+  card.append(h("div", { class: "am-filters" }, search, colPicker, filterBtn), labelsRow, tableHolder);
   return h("div", { class: `am-root${panel._narrow ? " am-narrow" : ""}` }, header, card);
 }
 
@@ -390,16 +684,16 @@ export function renderDetailView(panel) {
 
 function renderInfoTab(panel, hass, asset) {
   const make = (field, label, type = "text") => {
-    const input = h("input", {
-      class: "am-input",
-      "data-field": `asset-${field}`,
-      value: asset[field] == null ? "" : asset[field], type });
-    input.addEventListener("change", async () => {
-      try { await withBusy(null, async () => {
-        await updateAsset(hass, asset.id, { [field]: input.value || null }); });
-        showToast("Saved", "success", 2000);
-      }
-      catch (e) { showToast(String(e.message || e), "error", 6000); }
+    const input = haInput({
+      type,
+      value: asset[field] == null ? "" : asset[field],
+      onchange: async () => {
+        try { await withBusy(null, async () => {
+          await updateAsset(hass, asset.id, { [field]: input.value || null }); });
+          showToast("Saved", "success", 2000);
+        }
+        catch (e) { showToast(String(e.message || e), "error", 6000); }
+      },
     });
     return h("div", { class: "am-field" }, h("label", {}, label), input);
   };
@@ -555,26 +849,26 @@ function renderEntitiesTab(panel, hass, asset, entities) {
     // values from the panel would be misleading.
     let inlineValue = null;
     if (e.kind === "number" || e.kind === "text") {
-      inlineValue = h("input", {
-        class: "am-input am-inline-value",
-        "data-field": `entity-value-${e.id}`,
-        value: e.value == null ? "" : String(e.value),
+      inlineValue = haInput({
         type: e.kind === "number" ? "number" : "text",
-        placeholder: "value"});
-      inlineValue.addEventListener("change", async () => {
-        const raw = inlineValue.value.trim();
-        let next;
-        if (raw === "") next = null;
-        else if (e.kind === "number") next = Number(raw);
-        else next = raw;
-        try { await withBusy(null, async () => {
-          await updateEntity(hass, e.id, { value: next }); });
-          showToast("Value saved", "success", 2000);
-        } catch (err) {
-          inlineValue.value = e.value == null ? "" : String(e.value); // revert
-          showToast(String(err.message || err), "error", 6000);
-        }
+        value: e.value == null ? "" : String(e.value),
+        placeholder: "value",
+        onchange: async () => {
+          const raw = inlineValue.value.trim();
+          let next;
+          if (raw === "") next = null;
+          else if (e.kind === "number") next = Number(raw);
+          else next = raw;
+          try { await withBusy(null, async () => {
+            await updateEntity(hass, e.id, { value: next }); });
+            showToast("Value saved", "success", 2000);
+          } catch (err) {
+            inlineValue.value = e.value == null ? "" : String(e.value);
+            showToast(String(err.message || err), "error", 6000);
+          }
+        },
       });
+      inlineValue.classList.add("am-inline-value");
     }
 
     const summary = h("div", { class: "am-entity-summary am-grow" },
@@ -612,14 +906,16 @@ export function renderTemplatesView(panel) {
     const iconEl = t.icon
       ? h("ha-icon", { icon: t.icon, style: "margin-right:6px;vertical-align:middle" })
       : null;
-    card.append(h("div", { class: "am-row" },
+    card.append(h("div", { class: "am-row am-row-clickable",
+      onClick: () => templateEditorDialog(hass, t, () => {}) },
       h("span", { class: "am-grow" },
         iconEl,
         h("span", { style: "font-weight:500" }, t.name),
         h("span", { class: "am-muted" }, ` · ${t.entities?.length || 0} entities`)),
       h("button", { class: "am-btn secondary",
-        onClick: () => templateEditorDialog(hass, t, () => {}) }, "Edit"),
-      h("button", { class: "am-btn danger", onClick: async () => {
+        onClick: (ev) => { ev.stopPropagation(); templateEditorDialog(hass, t, () => {}); } }, "Edit"),
+      h("button", { class: "am-btn danger", onClick: async (ev) => {
+        ev.stopPropagation();
         const ok = await confirmDialog(`Delete template “${t.name}”?`,
           { danger: true, confirmLabel: "Delete" });
         if (!ok) return;

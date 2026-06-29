@@ -34,18 +34,23 @@ import { showToast, openModal, confirmDialog, withBusy } from "./ui.js";
 import { buildConfigFields } from "./config-fields.js";
 import { buildIconPicker, buildAreaPicker } from "./pickers.js";
 import { buildLabelPicker } from "./labelPicker.js";
+import { haInput, haSelect } from "./native-fields.js";
 
 // Asset creation dialog: name + icon + area + optional template. When a
 // template is selected, create the asset then apply the template in
 // sequence. Area is applied after the asset exists (the device is
 // created by the coordinator off the WS create event).
 export function assetCreateDialog(hass, onCreated) {
-  const nameInput = h("input", { class: "am-input", placeholder: "Asset name (e.g. My Car)" });
+  const nameInput = haInput({ placeholder: "Asset name (e.g. My Car)" });
   const iconPicker = buildIconPicker();
   const areaPicker = buildAreaPicker(hass, null, null);
   const labelPicker = buildLabelPicker(hass, [], null);
-  const templateSelect = h("select", { class: "am-select" },
-    h("option", { value: "" }, "Blank asset — no template"));
+  const templateSelectOpts = [{ value: "", label: "Blank asset — no template" }];
+  const templateSelect = haSelect({
+    options: templateSelectOpts,
+    onselected: (v) => { templateSelect._value = v; onTemplateChange(); },
+  });
+  templateSelect._value = "";
   const err = h("div", { class: "am-error" });
   const submit = h("button", { class: "am-btn" }, "Create");
   const close = h("button", { class: "am-btn secondary" }, "Cancel");
@@ -68,26 +73,8 @@ export function assetCreateDialog(hass, onCreated) {
 
   // Populate template options (built-in + user templates).
   let templates_ = [];
-  templateList(hass).then((templates) => {
-    templates_ = templates;
-    for (const t of [...templates].sort((a, b) => a.name.localeCompare(b.name))) {
-      templateSelect.append(h("option", { value: t.id },
-        `${t.name} (${t.entities?.length || 0} entities)`));
-    }
-  }).catch(() => { /* leave blank-only option */ });
-
-  // Track which template's defaults are currently reflected in the
-  // icon/label pickers so switching templates overrides only values that
-  // are still defaulted to the previous template — not user edits.
-  let prevTemplate = null;
-  const sameLabels = (a, b) => {
-    const sa = [...(a || [])].sort();
-    const sb = [...(b || [])].sort();
-    return sa.length === sb.length && sa.every((v, i) => v === sb[i]);
-  };
-
-  templateSelect.addEventListener("change", () => {
-    const t = templates_.find((x) => x.id === templateSelect.value) || null;
+  const onTemplateChange = () => {
+    const t = templates_.find((x) => x.id === templateSelect._value) || null;
     const iconDefaulted = !iconPicker.get()
       || (prevTemplate && iconPicker.get() === prevTemplate.icon);
     const labelsDefaulted = !labelPicker.get().length
@@ -95,12 +82,32 @@ export function assetCreateDialog(hass, onCreated) {
     if (iconDefaulted) iconPicker.set(t?.icon || "");
     if (labelsDefaulted) labelPicker.set(t?.labels || []);
     prevTemplate = t;
-  });
+  };
+  let prevTemplate = null;
+  const sameLabels = (a, b) => {
+    const sa = [...(a || [])].sort();
+    const sb = [...(b || [])].sort();
+    return sa.length === sb.length && sa.every((v, i) => v === sb[i]);
+  };
+  templateList(hass).then((templates) => {
+    templates_ = templates;
+    for (const t of [...templates].sort((a, b) => a.name.localeCompare(b.name))) {
+      templateSelectOpts.push({ value: t.id, label: `${t.name} (${t.entities?.length || 0} entities)` });
+    }
+    // Update native ha-select options or fallback <select>.
+    if (templateSelect.options && customElements.get("ha-select")) {
+      templateSelect.options = templateSelectOpts.map((o) => ({ label: o.label, value: o.value }));
+    } else {
+      for (const o of templateSelectOpts.slice(1)) {
+        templateSelect.append(h("option", { value: o.value }, o.label));
+      }
+    }
+  }).catch(() => { /* leave blank-only option */ });
 
   submit.addEventListener("click", async () => {
     const name = nameInput.value.trim();
     if (!name) { nameInput.focus(); return; }
-    const templateId = templateSelect.value;
+    const templateId = templateSelect._value;
     const icon = iconPicker.get() || undefined;
     const areaId = areaPicker.get();
     const labelIds = labelPicker.get();
@@ -137,7 +144,7 @@ export function assetCreateDialog(hass, onCreated) {
 }
 
 export function cloneDialog(hass, sourceAsset, onDone) {
-  const input = h("input", { class: "am-input", placeholder: `Clone of ${sourceAsset.name}` });
+  const input = haInput({ placeholder: `Clone of ${sourceAsset.name}` });
   const err = h("div", { class: "am-error" });
   const submit = h("button", { class: "am-btn" }, "Clone");
   const close = h("button", { class: "am-btn secondary" }, "Cancel");
@@ -212,11 +219,16 @@ export function templatePickerDialog(hass, asset, onApplied) {
 // fields and shows/hides the unit & initial-value fields.
 export function entityEditorDialog(hass, asset, entity, onSaved) {
   const isEdit = !!entity;
-  const slug = h("input", { class: "am-input", value: entity?.slug || "", placeholder: "mileage" });
-  const name = h("input", { class: "am-input", value: entity?.name || "", placeholder: "Mileage" });
-  const kind = h("select", { class: "am-select" },
-    ...ENTITY_KINDS.map((k) => h("option", { value: k, selected: entity?.kind === k }, k)));
-  const unit = h("input", { class: "am-input", value: entity?.unit_of_measurement || "", placeholder: "km, °C, …" });
+  const slug = haInput({ value: entity?.slug || "", placeholder: "mileage" });
+  const name = haInput({ value: entity?.name || "", placeholder: "Mileage" });
+  const kind = haSelect({
+    label: "Kind",
+    value: entity?.kind || ENTITY_KINDS[0],
+    options: ENTITY_KINDS.map((k) => ({ value: k, label: k })),
+    onselected: (v) => { kind._value = v; syncFieldsForKind(v); },
+  });
+  kind._value = entity?.kind || ENTITY_KINDS[0];
+  const unit = haInput({ value: entity?.unit_of_measurement || "", placeholder: "km, °C, …" });
   const iconPicker = buildIconPicker(entity?.icon || "");
   const useNativeEnabled = customElements.get("ha-switch") && customElements.get("ha-formfield");
   const enabledInput = useNativeEnabled
@@ -227,8 +239,7 @@ export function entityEditorDialog(hass, asset, entity, onSaved) {
     ? (() => { const ff = document.createElement("ha-formfield"); ff.label = "Enabled"; ff.append(enabledInput); return ff; })()
     : h("label", { style: "display:flex; align-items:center; gap:8px; cursor:pointer" },
         enabledInput, h("span", {}, "Enabled"));
-  const valueInput = h("input", { class: "am-input",
-    value: entity?.value == null ? "" : String(entity.value), placeholder: "initial value" });
+  const valueInput = haInput({ value: entity?.value == null ? "" : String(entity.value), placeholder: "initial value" });
 
   const err = h("div", { class: "am-error" });
   const submit = h("button", { class: "am-btn" }, isEdit ? "Save" : "Create");
@@ -251,7 +262,6 @@ export function entityEditorDialog(hass, asset, entity, onSaved) {
     if (KIND_HAS_VALUE.has(k)) valueHolder.append(h("div", { class: "am-field" }, h("label", {}, "Initial value"), valueInput));
   };
   syncFieldsForKind(entity?.kind || "number");
-  kind.addEventListener("change", () => syncFieldsForKind(kind.value));
 
   const form = h("div", {},
     h("h3", {}, isEdit ? `Edit ${entity.slug}` : "New entity"),
@@ -273,7 +283,7 @@ export function entityEditorDialog(hass, asset, entity, onSaved) {
     const payload = {
       slug: slug.value.trim(),
       name: name.value.trim(),
-      kind: kind.value,
+      kind: kind._value,
       enabled: enabledInput.checked,
       config: configFields.read(),
     };
@@ -328,7 +338,7 @@ export function entityEditorDialog(hass, asset, entity, onSaved) {
 // field builder). Used for create + edit.
 export function templateEditorDialog(hass, template, onSaved) {
   const isEdit = !!template;
-  const name = h("input", { class: "am-input", value: template?.name || "", placeholder: "My Template" });
+  const name = haInput({ value: template?.name || "", placeholder: "My Template" });
   const iconPicker = buildIconPicker(template?.icon || "");
   const labelPicker = buildLabelPicker(hass, template?.labels || [], null);
   const err = h("div", { class: "am-error" });
@@ -340,18 +350,20 @@ export function templateEditorDialog(hass, template, onSaved) {
     specs.forEach((spec, i) => {
       const cfgFields = buildConfigFields(spec.kind, spec.config);
       const specIconPicker = buildIconPicker(spec.icon || "");
-      const kindSel = h("select", { class: "am-select" },
-        ...ENTITY_KINDS.map((k) => h("option", { value: k, selected: spec.kind === k }, k)));
-      kindSel.addEventListener("change", () => {
-        spec.kind = kindSel.value;
-        spec.config = {};
-        renderSpecs();
+      const kindSel = haSelect({
+        value: spec.kind,
+        options: ENTITY_KINDS.map((k) => ({ value: k, label: k })),
+        onselected: (v) => {
+          spec.kind = v;
+          spec.config = {};
+          renderSpecs();
+        },
       });
-      const slugInp = h("input", { class: "am-input", value: spec.slug || "" });
+      const slugInp = haInput({ value: spec.slug || "" });
       slugInp.addEventListener("change", () => { spec.slug = slugInp.value.trim(); });
-      const nameInp = h("input", { class: "am-input", value: spec.name || "" });
+      const nameInp = haInput({ value: spec.name || "" });
       nameInp.addEventListener("change", () => { spec.name = nameInp.value.trim(); });
-      const unitInp = h("input", { class: "am-input", value: spec.unit_of_measurement || "", placeholder: "unit" });
+      const unitInp = haInput({ value: spec.unit_of_measurement || "", placeholder: "unit" });
       unitInp.addEventListener("change", () => { spec.unit_of_measurement = unitInp.value || undefined; });
       const rm = h("button", { class: "am-btn danger" }, "Remove");
       rm.addEventListener("click", () => { specs.splice(i, 1); renderSpecs(); });

@@ -9,25 +9,31 @@
  */
 
 import { h, clear } from "./dom.js";
+import { haInput, haSelect, haTextarea } from "./native-fields.js";
 
 export const buildConfigFields = (kind, initialConfig) => {
   const container = h("div", { class: "am-config-section" });
   const cfg = initialConfig || {};
-  let rawSync = null; // set when advanced JSON editor is open
+  let rawSync = null;
 
   const field = (label, inputNode) =>
     h("div", { class: "am-field" }, h("label", {}, label), inputNode);
   const numInput = (val, placeholder) =>
-    h("input", { class: "am-input", type: "number",
-      value: val == null ? "" : String(val), placeholder });
+    haInput({ type: "number", value: val == null ? "" : String(val), placeholder });
 
   if (kind === "number") {
     const min = numInput(cfg.min, "0");
     const max = numInput(cfg.max, "100");
     const step = numInput(cfg.step ?? 1, "1");
-    const mode = h("select", { class: "am-select" },
-      h("option", { value: "box", selected: (cfg.mode || "box") === "box" }, "box"),
-      h("option", { value: "slider", selected: cfg.mode === "slider" }, "slider"));
+    const mode = haSelect({
+      label: "Mode",
+      value: cfg.mode || "box",
+      options: [
+        { value: "box", label: "box" },
+        { value: "slider", label: "slider" },
+      ],
+      onselected: (v) => { mode.value = v; },
+    });
     container.append(h("div", { class: "am-grid" },
       field("Min", min), field("Max", max),
       field("Step", step), field("Mode", mode)));
@@ -48,7 +54,7 @@ export const buildConfigFields = (kind, initialConfig) => {
     const renderOptions = () => {
       clear(optionsList);
       options.forEach((opt, i) => {
-        const inp = h("input", { class: "am-input", value: opt });
+        const inp = haInput({ value: opt });
         inp.addEventListener("change", () => { options[i] = inp.value; });
         const rm = h("button", { class: "am-btn danger" }, "×");
         rm.addEventListener("click", (e) => { e.preventDefault(); options.splice(i, 1); renderOptions(); });
@@ -68,7 +74,7 @@ export const buildConfigFields = (kind, initialConfig) => {
   if (kind === "text") {
     const min = numInput(cfg.min ?? 0, "0");
     const max = numInput(cfg.max ?? 255, "255");
-    const pattern = h("input", { class: "am-input", value: cfg.pattern || "", placeholder: "regex pattern (optional)" });
+    const pattern = haInput({ value: cfg.pattern || "", placeholder: "regex pattern (optional)" });
     container.append(h("div", { class: "am-grid" },
       field("Min length", min), field("Max length", max),
       h("div", { class: "am-field", style: "grid-column: 1 / -1" }, h("label", {}, "Pattern"), pattern)));
@@ -83,22 +89,16 @@ export const buildConfigFields = (kind, initialConfig) => {
   }
 
   if (kind === "derived") {
-    const useNativeTa = customElements.get("ha-textarea");
-    const formula = useNativeTa
-      ? document.createElement("ha-textarea")
-      : h("textarea", { class: "am-textarea",
-          placeholder: "e.g. datediff(oil_change_date, now())" });
-    if (useNativeTa) {
-      formula.label = "Formula";
-      formula.placeholder = "e.g. datediff(oil_change_date, now())";
-      formula.resize = "vertical";
-      formula.style.width = "100%";
-    }
-    formula.value = cfg.formula || "";
-    const dc = h("input", { class: "am-input", value: cfg.device_class || "", placeholder: "device_class (optional)" });
-    const sc = h("input", { class: "am-input", value: cfg.state_class || "", placeholder: "state_class (optional)" });
+    const formula = haTextarea({
+      label: "Formula",
+      value: cfg.formula || "",
+      placeholder: "e.g. datediff(oil_change_date, now())",
+      resize: "vertical",
+    });
+    const dc = haInput({ value: cfg.device_class || "", placeholder: "device_class (optional)" });
+    const sc = haInput({ value: cfg.state_class || "", placeholder: "state_class (optional)" });
     container.append(
-      useNativeTa ? formula : field("Formula", formula),
+      formula,
       h("div", { class: "am-grid" }, field("Device class", dc), field("State class", sc)));
     return {
       container,
@@ -112,8 +112,8 @@ export const buildConfigFields = (kind, initialConfig) => {
   }
 
   if (kind === "sensor") {
-    const dc = h("input", { class: "am-input", value: cfg.device_class || "", placeholder: "device_class (optional)" });
-    const sc = h("input", { class: "am-input", value: cfg.state_class || "", placeholder: "state_class (optional)" });
+    const dc = haInput({ value: cfg.device_class || "", placeholder: "device_class (optional)" });
+    const sc = haInput({ value: cfg.state_class || "", placeholder: "state_class (optional)" });
     container.append(h("div", { class: "am-grid" }, field("Device class", dc), field("State class", sc)));
     return {
       container,

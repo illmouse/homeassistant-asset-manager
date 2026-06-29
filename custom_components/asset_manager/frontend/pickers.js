@@ -18,6 +18,7 @@
  */
 
 import { h } from "./dom.js";
+import { haInput, haSelect } from "./native-fields.js";
 
 export function buildIconPicker(initial = "", onChange = null) {
   // Prefer HA's native <ha-icon-picker> when available — it shows real
@@ -46,11 +47,7 @@ export function buildIconPicker(initial = "", onChange = null) {
 
   // Fallback: plain text input (e.g. if HA hasn't registered the element
   // yet, or the panel runs outside a HA frontend context).
-  const input = h("input", {
-    class: "am-input",
-    value: initial,
-    placeholder: "mdi:car",
-  });
+  const input = haInput({ placeholder: "mdi:car" });
   if (onChange) input.addEventListener("change", () => onChange(input.value.trim()));
   return {
     container: input,
@@ -67,17 +64,23 @@ export function buildAreaPicker(hass, initial = null, onChange = null) {
   // areas/api/entities/etc. from providers in HA's app tree. Those
   // providers do not cross our panel's shadow DOM boundary
   // (asset-manager-panel.js attaches its own shadow root), so the native
-  // element renders blank inside our panel. Use a plain themed <select>
-  // populated from hass.areas instead.
+  // element renders blank inside our panel. Use a themed <select>
+  // (ha-select when available, else .am-select) populated from
+  // hass.areas instead.
   const areas = (hass && hass.areas) ? Object.values(hass.areas) : [];
-  const select = h("select", { class: "am-select" },
-    h("option", { value: "", selected: initial == null }, "No area"),
-    ...areas.map((a) =>
-      h("option", { value: a.area_id, selected: a.area_id === initial }, a.name)));
-  if (onChange) select.addEventListener("change", () => onChange(select.value || null));
+  const options = [
+    { value: "", label: "No area" },
+    ...areas.map((a) => ({ value: a.area_id, label: a.name })),
+  ];
+  const select = haSelect({
+    options,
+    value: initial || "",
+    onselected: (v) => { if (onChange) onChange(v || null); },
+  });
+  select._value = initial || "";
   const container = h("div", { class: "am-area-picker" }, select);
   return {
     container,
-    get: () => (select.value === "" ? null : select.value),
+    get: () => (select._value === "" || select._value == null ? null : select._value),
   };
 }

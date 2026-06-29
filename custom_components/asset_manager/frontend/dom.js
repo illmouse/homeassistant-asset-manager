@@ -15,6 +15,7 @@ export const h = (tag, attrs, ...children) => {
       else if (k === "style") el.setAttribute("style", v);
       else if (k.startsWith("on") && typeof v === "function")
         el.addEventListener(k.slice(2).toLowerCase(), v);
+      else if (k.startsWith(".")) el[k.slice(1)] = v;
       else if (v === false || v == null) continue;
       else if (v === true) el.setAttribute(k, "");
       else el.setAttribute(k, v);

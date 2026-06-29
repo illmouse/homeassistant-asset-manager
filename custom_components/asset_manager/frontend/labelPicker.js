@@ -22,6 +22,7 @@ import { h, clear } from "./dom.js";
 import { labelColorToCss } from "./constants.js";
 import { listLabels, createLabel } from "./ws.js";
 import { showToast, withBusy } from "./ui.js";
+import { haInput, haSelect } from "./native-fields.js";
 
 const chipStyle = (color) => {
   const css = labelColorToCss(color);
@@ -54,20 +55,26 @@ export function buildLabelPicker(hass, initialLabelIds = [], onChange = null) {
   const optionsList = h("div", { class: "am-label-options" });
   const newLink = h("button", { type: "button", class: "am-label-new-link" }, "+ New label…");
 
-  const nameInput = h("input", { class: "am-input am-label-create-name", placeholder: "Label name" });
-  const colorSelect = h("select", { class: "am-select am-label-create-color" },
-    h("option", { value: "" }, "Default"),
-    h("option", { value: "red" }, "Red"),
-    h("option", { value: "pink" }, "Pink"),
-    h("option", { value: "purple" }, "Purple"),
-    h("option", { value: "blue" }, "Blue"),
-    h("option", { value: "cyan" }, "Cyan"),
-    h("option", { value: "teal" }, "Teal"),
-    h("option", { value: "green" }, "Green"),
-    h("option", { value: "amber" }, "Amber"),
-    h("option", { value: "orange" }, "Orange"),
-    h("option", { value: "grey" }, "Grey"));
-  const iconInput = h("input", { class: "am-input am-label-create-icon", placeholder: "mdi:tag (optional)" });
+  const nameInput = haInput({ placeholder: "Label name" });
+  const COLOR_OPTIONS = [
+    { value: "", label: "Default" },
+    { value: "red", label: "Red" },
+    { value: "pink", label: "Pink" },
+    { value: "purple", label: "Purple" },
+    { value: "blue", label: "Blue" },
+    { value: "cyan", label: "Cyan" },
+    { value: "teal", label: "Teal" },
+    { value: "green", label: "Green" },
+    { value: "amber", label: "Amber" },
+    { value: "orange", label: "Orange" },
+    { value: "grey", label: "Grey" },
+  ];
+  const colorSelect = haSelect({
+    options: COLOR_OPTIONS,
+    onselected: (v) => { colorSelect._value = v || ""; },
+  });
+  colorSelect._value = "";
+  const iconInput = haInput({ placeholder: "mdi:tag (optional)" });
   const createBtn = h("button", { class: "am-btn" }, "Create label");
   const createErr = h("div", { class: "am-error" });
   const createForm = h("div", { class: "am-label-create" },
@@ -78,12 +85,20 @@ export function buildLabelPicker(hass, initialLabelIds = [], onChange = null) {
     createBtn,
     createErr);
 
-  const dropdown = h("div", { class: "am-label-dropdown" },
-    optionsList,
-    newLink,
-    createForm);
+  const dropdown = h("div", {
+    class: "am-label-dropdown am-label-picker-dropdown",
+    style: "position:fixed",
+  }, optionsList, newLink, createForm);
 
-  const container = h("div", { class: "am-label-picker" }, combobox, dropdown);
+  const container = h("div", { class: "am-label-picker" }, combobox);
+
+  const positionDropdown = () => {
+    const r = combobox.getBoundingClientRect();
+    dropdown.style.left = `${r.left}px`;
+    dropdown.style.top = `${r.bottom + 4}px`;
+    dropdown.style.width = `${r.width}px`;
+    dropdown.style.minWidth = `${r.width}px`;
+  };
 
   // --- State helpers ---
   const get = () => [...labelIds];
@@ -164,7 +179,8 @@ export function buildLabelPicker(hass, initialLabelIds = [], onChange = null) {
   const openDropdown = () => {
     if (dropdownOpen) return;
     dropdownOpen = true;
-    dropdown.style.display = "";
+    document.body.append(dropdown);
+    positionDropdown();
     createOpen = false;
     renderCreateVisibility();
     renderOptions();
@@ -172,8 +188,8 @@ export function buildLabelPicker(hass, initialLabelIds = [], onChange = null) {
   const closeDropdown = () => {
     if (!dropdownOpen) return;
     dropdownOpen = false;
+    dropdown.remove();
     createOpen = false;
-    dropdown.style.display = "none";
     searchTerm = "";
     searchInput.value = "";
     renderCreateVisibility();
@@ -204,7 +220,7 @@ export function buildLabelPicker(hass, initialLabelIds = [], onChange = null) {
     try {
       await withBusy(createBtn, async () => {
         const payload = { name };
-        if (colorSelect.value) payload.color = colorSelect.value;
+        if (colorSelect._value) payload.color = colorSelect._value;
         if (iconInput.value.trim()) payload.icon = iconInput.value.trim();
         await createLabel(hass, payload);
         await refreshLabels();
@@ -218,7 +234,8 @@ export function buildLabelPicker(hass, initialLabelIds = [], onChange = null) {
         showToast(`Created label “${name}”`, "success", 2000);
         createOpen = false;
         nameInput.value = "";
-        colorSelect.value = "";
+        colorSelect._value = "";
+        if (customElements.get("ha-select")) colorSelect.value = "";
         iconInput.value = "";
         renderCreateVisibility();
         searchInput.focus();
@@ -228,9 +245,10 @@ export function buildLabelPicker(hass, initialLabelIds = [], onChange = null) {
 
   // Outside click closes dropdown + collapses create form.
   document.addEventListener("click", (ev) => {
-    if (dropdownOpen && !ev.composedPath().includes(container)) {
-      closeDropdown();
-    }
+    if (!dropdownOpen) return;
+    if (ev.composedPath().includes(combobox) ||
+        ev.composedPath().includes(dropdown)) return;
+    closeDropdown();
   });
 
   // --- Load + refresh ---
@@ -248,8 +266,7 @@ export function buildLabelPicker(hass, initialLabelIds = [], onChange = null) {
   };
   load();
 
-  // Start with dropdown hidden.
-  dropdown.style.display = "none";
+  // Dropdown starts detached; appended to document.body on open.
   renderCreateVisibility();
 
   return { container, get, set, refreshLabels: () => load() };

@@ -77,7 +77,7 @@ class AssetManagerPanel extends HTMLElement {
     this._search = "";
     this._sort = "name";
     this._sortDir = "asc";
-    this._activeLabel = null;
+    this._activeLabels = new Set();
     this._filters = {}; // property -> selected value (null = "All")
     this._selectedEntityIds = new Set();
     // Asset list table: which columns are visible. Persisted to

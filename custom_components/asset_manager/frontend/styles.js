@@ -20,6 +20,8 @@ export const STYLES = `
   .am-row { display: flex; align-items: center; gap: 12px; padding: 8px 0;
             border-bottom: 1px solid var(--divider-color, #eee); }
   .am-row:last-child { border-bottom: none; }
+  .am-row.am-row-clickable { cursor: pointer; transition: background-color .1s ease; }
+  .am-row.am-row-clickable:hover { background: var(--divider-color, rgba(0,0,0,.06)); }
   .am-grow { flex: 1; min-width: 0; }
   .am-btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
   .am-btn { background: var(--primary-color, #03a9f4); color: #fff; border: none;
@@ -33,19 +35,18 @@ export const STYLES = `
     padding: 8px; border: 1px solid var(--divider-color, #ccc);
     border-radius: 4px; font-size: 14px; width: 100%;
     box-sizing: border-box; font-family: inherit;
-    /* Tell the browser to render native widgets (select arrow, date
-       picker, checkbox) in the theme's color scheme. Without this the
-       UA may paint a light arrow on a light fill or vice-versa. */
     color-scheme: light dark;
-    /* HA exposes --input-fill-color (fill) and --input-ink-color (text)
-       on modern builds; fall back to card-background + primary-text for
-       older builds, then to sensible literals. Never use
-       --input-background-color — it is not defined by HA and would
-       fall back to white, which on a dark theme renders the field
-       unreadable. */
     background: var(--input-fill-color, var(--card-background-color, #1c1c1c));
     color: var(--input-ink-color, var(--primary-text-color, #e1e1e1));
   }
+  /* Native HA form elements — make them fill our card/dialog width and
+     inherit the HA theme. These are webawesome-based (ha-input,
+     ha-textarea) and Lit-based (ha-select); they default to inline-block
+     and need explicit sizing in our flex/grid layouts. */
+  ha-input, ha-textarea, ha-select { display: block; width: 100%; box-sizing: border-box; }
+  ha-input::part(wa-input), ha-textarea::part(wa-textarea) { width: 100%; }
+  .am-native-field { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+  .am-native-label { font-size: 12px; color: var(--secondary-text-color, #888); }
   /* Style the <select> dropdown arrow explicitly so it tracks the
      theme instead of using the UA default (which can be invisible
      on dark fills). The appearance:none reset lets us substitute
@@ -96,6 +97,7 @@ export const STYLES = `
   .am-error { color: var(--error-state-color, #db4437); font-size: 13px; margin-top: 8px;
               padding: 6px 10px; border-left: 3px solid var(--error-state-color, #db4437);
               border-radius: 4px; background: rgba(219,68,55,.06); }
+  .am-error:empty { display: none; }
   .am-empty { text-align: center; padding: 32px 16px; color: var(--secondary-text-color, #888); }
   .am-empty .am-empty-icon { font-size: 40px; margin-bottom: 8px; opacity: .5; }
   .am-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
@@ -119,7 +121,41 @@ export const STYLES = `
   .am-filters { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
   .am-filters .am-search { flex: 1 1 220px; margin: 0; }
   .am-sort { flex: 0 0 auto; }
-  .am-filter-select { flex: 0 0 auto; }
+  .am-filter-btn { flex: 0 0 auto; }
+
+  /* Filter dialog (modal) */
+  .am-filter-dialog { min-width: 360px; max-width: 90vw; }
+  .am-filter-dialog-row { display: flex; flex-direction: column; gap: 4px;
+                           margin-bottom: 12px; }
+  .am-filter-dialog-label { font-size: 0.85em;
+                             color: var(--secondary-text-color, #888);
+                             text-transform: capitalize; }
+  .am-filter-dialog-select { width: 100%; }
+  .am-filter-dialog-mode { width: 100%; margin-bottom: 6px; }
+  .am-filter-dialog-input { width: 100%; }
+  /* Filter combobox dropdown (position:fixed to escape modal overflow). */
+  .am-label-dropdown.am-filter-dropdown { z-index: 200; right: auto; box-sizing: border-box; }
+  /* Label picker dropdown (position:fixed to escape modal overflow). */
+  .am-label-dropdown.am-label-picker-dropdown { z-index: 200; right: auto; box-sizing: border-box; }
+  /* CSS-drawn checkbox for filter dropdown options. Visible in both
+     states so the toggle affordance reads as a checkbox, not empty
+     space. Scoped to .am-filter-dropdown so the label picker's
+     text-glyph check (labelPicker.js) is unaffected. */
+  .am-filter-dropdown .am-label-check {
+    width: 14px; height: 14px; flex: 0 0 14px;
+    border: 1px solid var(--secondary-text-color, #888);
+    border-radius: 2px; background: transparent;
+    position: relative; color: transparent;
+  }
+  .am-filter-dropdown .am-label-option.selected .am-label-check {
+    background: var(--primary-color, #03a9f4);
+    border-color: var(--primary-color, #03a9f4);
+  }
+  .am-filter-dropdown .am-label-option.selected .am-label-check::after {
+    content: "✓"; position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 11px; font-weight: 700;
+  }
 
   /* Column picker for the asset list table */
   .am-col-picker { position: relative; flex: 0 0 auto; }
@@ -143,18 +179,18 @@ export const STYLES = `
   .am-table-sortable:hover { color: var(--primary-color, #03a9f4); }
   .am-table-sortable.active { color: var(--primary-color, #03a9f4); }
   .am-table-icon-th { width: 32px; }
-  .am-table-actions-th { text-align: right; white-space: nowrap; }
+  .am-table .am-table-actions-th { text-align: right; white-space: nowrap; }
   .am-table td { padding: 8px 10px; border-bottom: 1px solid var(--divider-color, #eee);
                  vertical-align: middle; }
-  .am-table tbody tr { transition: background-color .1s ease; }
+  .am-table tbody tr { transition: background-color .1s ease; cursor: pointer; }
   .am-table tbody tr:hover { background: var(--divider-color, rgba(0,0,0,.06)); }
   .am-table tbody tr:last-child td { border-bottom: none; }
   .am-table-icon-td { text-align: center; white-space: nowrap; }
   .am-table-name { font-weight: 500; }
   .am-table-link { cursor: pointer; color: var(--primary-text-color, #000); }
   .am-table-link:hover { color: var(--primary-color, #03a9f4); }
-  .am-table-actions { text-align: right; white-space: nowrap; }
-  .am-table-actions .am-btn { margin-left: 4px; }
+  .am-table .am-table-actions { display: flex; justify-content: flex-end; gap: 4px;
+                       white-space: nowrap; }
   .am-table-chips { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
   .am-table-chip { font-size: 11px; padding: 2px 8px; }
   .am-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -197,7 +233,10 @@ export const STYLES = `
   .am-label-options { max-height: 200px; overflow-y: auto; margin-bottom: 8px; }
   .am-label-option { display: flex; align-items: center; gap: 6px;
                      padding: 6px 8px; cursor: pointer; border-radius: 4px;
-                     border: 1px solid transparent; margin-bottom: 4px; }
+                     border: 1px solid transparent; margin-bottom: 4px;
+                     min-width: 0; }
+  .am-label-option-text { min-width: 0; overflow: hidden;
+                           text-overflow: ellipsis; white-space: nowrap; }
   .am-label-option:hover { background: var(--divider-color, rgba(0,0,0,.06)); }
   .am-label-option.selected { border-color: var(--primary-color, #03a9f4); }
   .am-label-check { width: 14px; display: inline-block;
@@ -253,7 +292,7 @@ export const STYLES = `
   .am-root.am-narrow .am-batch-bar .am-btn { flex: 1 1 auto; }
   .am-root.am-narrow .am-filters { flex-direction: column; align-items: stretch; }
   .am-root.am-narrow .am-sort { width: 100%; }
-  .am-root.am-narrow .am-filter-select { width: 100%; }
+  .am-root.am-narrow .am-filter-btn { width: 100%; }
   .am-root.am-narrow .am-col-picker { align-self: flex-end; }
 `;
 

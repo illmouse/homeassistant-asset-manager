@@ -34,15 +34,18 @@ export const LABEL_COLOR_NAMES = [
 ];
 
 // Map a label color value (named or hex) to a CSS color string usable
-// inline. Named colors resolve to HA's --label-color-<name> variable
-// (HA's label-picker sets these on :root); hex passes through.
+// inline. Named colors resolve to HA's --<name>-color theme variable
+// (the same mapping HA's own computeCssColor uses in
+// src/common/color/compute-color.ts); hex passes through. Unknown
+// strings fall back to HA's primary-text color so chips stay legible
+// rather than silently becoming transparent invalid CSS.
 export const labelColorToCss = (color) => {
   if (!color) return null;
   if (color.startsWith("#")) return color;
   if (LABEL_COLOR_NAMES.includes(color)) {
-    return `var(--label-color-${color}, var(--state-active-color, #03a9f4))`;
+    return `var(--${color}-color)`;
   }
-  return color;
+  return `var(--primary-text-color)`;
 };
 
 // Kinds that accept a unit_of_measurement.
