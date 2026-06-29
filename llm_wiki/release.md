@@ -133,19 +133,21 @@ git push origin vX.Y.Z
 Push the tag explicitly — `git push origin main` does not push tags
 unless `--follow-tags` is configured.
 
-### 6. Create the GitHub Release
+### 6. GitHub Release (automatic)
 
-Use `gh` (or the web UI):
-
-```bash
-gh release create vX.Y.Z --title "vX.Y.Z" \
-  --notes "$(git tag -l --format='%(contents)' vX.Y.Z)"
-```
+Pushing the tag triggers the **Release** GitHub Actions workflow
+(`.github/workflows/release.yml`), which creates the GitHub Release
+using the tag annotation as the release body. No manual step is
+required.
 
 The release title is the tag name (`vX.Y.Z`); the body is the tag
-annotation (which mirrors the CHANGELOG intro). Do **not** attach
-binary assets — HACS fetches the source tree from the tag, so there
-is nothing to upload.
+annotation (which mirrors the CHANGELOG intro). No binary assets are
+attached — HACS fetches the source tree from the tag, so there is
+nothing to upload.
+
+To verify, open the Actions tab after pushing the tag and confirm the
+"Release" workflow succeeded:
+https://github.com/illmouse/homeassistant-asset-manager/actions/workflows/release.yml
 
 ## Post-release
 
@@ -195,4 +197,6 @@ If a release ships with a critical bug:
 | `hacs.json` | HACS metadata | Only if min HA version changes |
 | `README.md` | User-facing install/feature docs | Only if features/install change |
 | Git tag `vX.Y.Z` | HACS resolution target | Yes — one per release |
-| GitHub Release | User-facing release notes | Yes — one per release |
+| GitHub Release | User-facing release notes | Yes — auto-created by workflow |
+| `.github/workflows/release.yml` | Release automation | Only if the process changes |
+| `.github/workflows/ci.yml` | CI (lint/test on push/PR) | Only if the process changes |
