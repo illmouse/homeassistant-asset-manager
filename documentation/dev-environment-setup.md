@@ -161,7 +161,7 @@ python dev/scripts/test_integration
 | Component   | Version     |
 |-------------|-------------|
 | HA image    | `stable` (currently 2026.6.4) |
-| Python (host venv, for tests/lint) | 3.13+ |
+| Python (host venv, for tests/lint) | 3.14+ |
 | Ruff        | >=0.5       |
 | Pytest      | >=8.0       |
 
