@@ -156,5 +156,5 @@ HA caches Python imports, so most changes require restarting HA:
 - [x] Phase 2 — Templates + Clone
 - [x] Phase 3 — Derived sensors
 - [x] Phase 4 — Frontend panel
-- [~] MVP close-out — README, hacs.json, backup note
+- [x] MVP close-out — README, hacs.json, backup note
 - [ ] Post-MVP — refactor + new features (see implementation_plan.md)

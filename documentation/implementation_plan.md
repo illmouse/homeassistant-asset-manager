@@ -32,11 +32,11 @@ UI, with sensible errors and a README.
   (create/update entity, template apply) instead of generic toasts.
   Needs `ws.js` to extract `error.message` from WS error responses and
   dialogs to render an `.am-error` line per field.
-- [ ] **README.md** — install via HACS, screenshots, what it does, link
+- [x] **README.md** — install via HACS, screenshots, what it does, link
   to docs. Required for HACS listing.
-- [ ] **hacs.json** — HACS manifest (`manifest.json` already valid for
+- [x] **hacs.json** — HACS manifest (`manifest.json` already valid for
   HA; `hacs.json` just declares the repo type + filename).
-- [ ] **Backup note** — one paragraph in README pointing at
+- [x] **Backup note** — one paragraph in README pointing at
   `.storage/asset_manager/` (assets, entities, templates collections).
 
 Exit criteria: installable via HACS; a fresh user can build a car asset

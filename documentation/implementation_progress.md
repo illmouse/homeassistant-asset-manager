@@ -1,7 +1,7 @@
 # Asset Manager — Implementation Progress
 
 Live progress tracker. Phases 0–4 are complete; the MVP close-out is
-in progress. Post-MVP work is listed in `implementation_plan.md` but
+complete. Post-MVP work is listed in `implementation_plan.md` but
 not tracked here until started.
 
 **Status legend:** `[ ]` pending · `[~]` in progress · `[x]` done · `[!]`
@@ -77,56 +77,31 @@ blocked.
   `asset_manager/update_area` WS commands; `ws.js` gained `getAreas`/
   `updateArea` wrappers.
 
-## MVP close-out  `[~]`
+## MVP close-out  `[x]`
 **Goal:** publishable as a HACS custom integration.
 
 - [x] Template CRUD editor in UI (backend exists; frontend only)
 - [x] Error UX — voluptuous errors surfaced in dialogs
-- [ ] README.md
-- [ ] hacs.json
-- [ ] Backup note in README
+- [x] README.md
+- [x] hacs.json
+- [x] Backup note in README
 
-**Result:** _(in progress)_
+**Result:** v0.1.0 tagged. README, hacs.json, CHANGELOG, screenshots,
+manifest metadata (issue_tracker, homeassistant min-version,
+codeowners, documentation URL) all in place.
 
 **Session log:**
-- **2026-06-28** — Replaced custom `tags` field with native HA labels.
-  `Asset.tags` removed entirely (models.py, storage.py, voluptuous
-  schemas). Two new bespoke WS commands: `asset_manager/get_asset_labels`
-  (returns `{asset_id: [label_id]}`) and `asset_manager/update_asset_labels`
-  (full-replace device labels). Clone now copies source device's labels
-  to the new device (and fixed pre-existing bug: clone passed `None`
-  for manufacturer/model, which the create schema rejects). New
-  `frontend/labelPicker.js` (chip-based multi-select + inline create
-  via native `config/label_registry/*`). List view label-chip filter
-  replaces tag-chip filter. Create dialog gains a label picker. Panel
-  subscribes to `label_registry_updated` for live refresh. 5 new tests
-  in `test_storage.py` (tags rejection, no-tags attr, get/update labels,
-  clone label copy). All 91 tests pass (HA 2026.7.0b2, Python 3.14, in
-  container — host Python 3.13 cannot run HA). ruff clean, all JS
-  passes `node --check`. Note: host can no longer run pytest (HA
-  2026.6+ needs Python ≥3.14); use `docker exec homeassistant` per
-  `(b3)`.
-- **2026-06-28** — Added labels + icon picker to templates.
-  `Template` dataclass gains a `labels: list[str]` field (persisted in
-  template storage; `as_dict` emits `CONF_LABELS` always). New constants
-  `CONF_LABELS`, `CONF_APPLY_LABELS` in `const.py`.
-  `TEMPLATE_CREATE_FIELDS`/`TEMPLATE_UPDATE_FIELDS` accept `labels`
-  (voluptuous `vol.All(cv.ensure_list, [str])`).
-  `WS_APPLY_TEMPLATE_SCHEMA` gains `apply_labels` (default `True`).
-  `ws_apply_template` merges (union, not replace) template labels onto
-  the asset's device when `apply_labels` is set, and returns
-  `{"created": [...], "applied_labels": [...]}`. Frontend:
-  `templateEditorDialog` uses `buildIconPicker` (was plain `<input>`)
-  for the template icon, adds a per-spec `buildIconPicker` in each
-  entity-spec row, and renders a `buildLabelPicker` for template labels.
-  `templatePickerDialog` shows an "Also apply template labels" checkbox
-  (default checked) and passes `applyLabels` through to `applyTemplate`.
-  `renderTemplatesView` shows `template.icon` next to the name (mirrors
-  asset list). Post-apply, the detail view refreshes `panel._assetLabels`
-  for the target asset from the WS response. 7 new tests in
-  `test_templates.py` (create/update/clear labels, apply merge, apply
-  disabled, no-template-labels, per-spec icon). 97 tests pass on host
-  (HA 2026.2.3, Python 3.13). ruff clean, all JS passes `node --check`.
+- **2026-06-29** — v0.1.0 release prep. Committed pending frontend
+  work (native HA form elements, clickable rows, label color fix,
+  dropdown overflow fix, error banner `:empty` fix, screenshots) as
+  `3c8a2cc`. Wrote README.md (features, screenshots, install via
+  HACS, entity kinds table, backup note, troubleshooting, files
+  tree). Wrote CHANGELOG.md (Keep a Changelog format, v0.1.0 entry).
+  Updated manifest.json: `documentation`/`issue_tracker` →
+  `github.com/illmouse/...`, `codeowners` → `[@illmouse]`, added
+  `"homeassistant": "2026.2.0"`. Created `hacs.json` with
+  `render_readme: true` + min-version. Restored `panel.py`
+  `cache_headers=True` (was False for dev). Tagged `v0.1.0`.
 
 ---
 
