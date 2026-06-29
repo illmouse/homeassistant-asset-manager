@@ -10,6 +10,7 @@
 
 import { h, clear } from "./dom.js";
 import { haInput, haSelect, haTextarea } from "./native-fields.js";
+import { SENSOR_DEVICE_CLASSES, SENSOR_STATE_CLASSES } from "./constants.js";
 
 export const buildConfigFields = (kind, initialConfig) => {
   const container = h("div", { class: "am-config-section" });
@@ -95,8 +96,18 @@ export const buildConfigFields = (kind, initialConfig) => {
       placeholder: "e.g. datediff(oil_change_date, now())",
       resize: "vertical",
     });
-    const dc = haInput({ value: cfg.device_class || "", placeholder: "device_class (optional)" });
-    const sc = haInput({ value: cfg.state_class || "", placeholder: "state_class (optional)" });
+    const dc = haSelect({
+      label: "Device class",
+      value: cfg.device_class || "",
+      clearable: true,
+      options: SENSOR_DEVICE_CLASSES.map((v) => ({ value: v, label: v || "—" })),
+    });
+    const sc = haSelect({
+      label: "State class",
+      value: cfg.state_class || "",
+      clearable: true,
+      options: SENSOR_STATE_CLASSES.map((v) => ({ value: v, label: v || "—" })),
+    });
     container.append(
       formula,
       h("div", { class: "am-grid" }, field("Device class", dc), field("State class", sc)));
@@ -104,23 +115,33 @@ export const buildConfigFields = (kind, initialConfig) => {
       container,
       read: () => {
         const out = { formula: formula.value.trim() };
-        if (dc.value.trim()) out.device_class = dc.value.trim();
-        if (sc.value.trim()) out.state_class = sc.value.trim();
+        if (dc.value) out.device_class = dc.value;
+        if (sc.value) out.state_class = sc.value;
         return out;
       },
     };
   }
 
   if (kind === "sensor") {
-    const dc = haInput({ value: cfg.device_class || "", placeholder: "device_class (optional)" });
-    const sc = haInput({ value: cfg.state_class || "", placeholder: "state_class (optional)" });
+    const dc = haSelect({
+      label: "Device class",
+      value: cfg.device_class || "",
+      clearable: true,
+      options: SENSOR_DEVICE_CLASSES.map((v) => ({ value: v, label: v || "—" })),
+    });
+    const sc = haSelect({
+      label: "State class",
+      value: cfg.state_class || "",
+      clearable: true,
+      options: SENSOR_STATE_CLASSES.map((v) => ({ value: v, label: v || "—" })),
+    });
     container.append(h("div", { class: "am-grid" }, field("Device class", dc), field("State class", sc)));
     return {
       container,
       read: () => {
         const out = {};
-        if (dc.value.trim()) out.device_class = dc.value.trim();
-        if (sc.value.trim()) out.state_class = sc.value.trim();
+        if (dc.value) out.device_class = dc.value;
+        if (sc.value) out.state_class = sc.value;
         return out;
       },
     };

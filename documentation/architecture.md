@@ -90,11 +90,6 @@ JSON. Templates export/import for sharing. Asset packs support both.
   StorageCollection covers our scale.
 - Global mutable state outside `hass.data[DOMAIN]`.
 
-## Top-level implementation plan (summary)
-See `implementation_plan.md` for the full phased breakdown. Order:
-0. Scaffold  →  1. Storage + CRUD  →  2. Templates + Clone  →
-3. Derived sensors  →  4. Frontend panel  →  5. Polish.
-
 ## References
 - Developer docs: https://developers.home-assistant.io/
 - Storage helper: `homeassistant/helpers/storage.py`

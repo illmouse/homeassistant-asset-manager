@@ -1,0 +1,15 @@
+services:
+  homeassistant:
+    container_name: homeassistant
+    image: "ghcr.io/home-assistant/home-assistant:stable"
+    volumes:
+      - ./config:/config
+      - ../custom_components/asset_manager:/config/custom_components/asset_manager
+      - /etc/localtime:/etc/localtime:ro
+      - /run/dbus:/run/dbus:ro
+    restart: unless-stopped
+    ports:
+      - 8123:8123
+    privileged: true
+    environment:
+      TZ: Europe/Mocow

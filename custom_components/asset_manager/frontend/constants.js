@@ -48,6 +48,78 @@ export const labelColorToCss = (color) => {
   return `var(--primary-text-color)`;
 };
 
+// Sensor device classes offered in the entity editor dropdown. Mirrors
+// homeassistant.components.sensor.SensorDeviceClass. The leading empty
+// entry renders as the "none" / unset option so users can leave
+// device_class unspecified.
+export const SENSOR_DEVICE_CLASSES = [
+  "",
+  "date",
+  "enum",
+  "timestamp",
+  "aesthetic",
+  "apparent_power",
+  "area",
+  "battery",
+  "blood_glucose_concentration",
+  "carbon_monoxide",
+  "carbon_dioxide",
+  "conductivity",
+  "current",
+  "data_rate",
+  "data_size",
+  "distance",
+  "duration",
+  "energy",
+  "energy_distance",
+  "energy_storage",
+  "frequency",
+  "gas",
+  "humidity",
+  "illuminance",
+  "irradiance",
+  "moisture",
+  "monetary",
+  "nitrogen_dioxide",
+  "nitrogen_monoxide",
+  "nitrous_oxide",
+  "ozone",
+  "ph",
+  "pm1",
+  "pm10",
+  "pm25",
+  "power_factor",
+  "power",
+  "precipitation",
+  "precipitation_intensity",
+  "pressure",
+  "reactive_power",
+  "signal_strength",
+  "sound_pressure",
+  "speed",
+  "sulphur_dioxide",
+  "temperature",
+  "volatile_organic_compounds",
+  "volatile_organic_compounds_parts",
+  "voltage",
+  "volume",
+  "volume_storage",
+  "volume_flow_rate",
+  "water",
+  "weight",
+  "wind_direction",
+  "wind_speed",
+];
+
+// State classes — homeassistant.components.sensor.SensorStateClass
+// plus an empty "unset" option.
+export const SENSOR_STATE_CLASSES = [
+  "",
+  "measurement",
+  "total",
+  "total_increasing",
+];
+
 // Kinds that accept a unit_of_measurement.
 export const KIND_HAS_UNIT = new Set(["number", "sensor", "derived"]);
 // Kinds that accept an initial value (writable / stateful).

@@ -28,12 +28,6 @@ UI.
   other entities on the same asset (e.g. `days_until_oil_change`).
   The formula is evaluated safely (no `eval`); recalculation is
   event-driven plus a midnight tick for date-based math.
-- **Native HA labels** — assets use HA's built-in label registry for
-  grouping and filtering. Filter the asset list by label, area,
-  manufacturer, model, entity count, or icon.
-- **Native HA form elements** — the panel uses HA's own Material
-  form controls (`ha-input`, `ha-select`, `ha-textarea`,
-  `ha-icon-picker`) with automatic fallback on older HA builds.
 - **Live updates** — the panel subscribes to the integration's
   storage collections; changes from any client (browser, another tab,
   automation) appear instantly.

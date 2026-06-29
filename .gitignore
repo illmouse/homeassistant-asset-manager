@@ -218,12 +218,9 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Home Assistant dev instance state
-config/.storage/
-config/home-assistant.log*
-config/deps/
-config/tts/
-config/clouds/
+# Home Assistant dev instance — track the compose stack and dev scripts,
+# ignore runtime state (HA config dir, logs, DB, diagnostic exports).
+dev/config/
+dev/diagnostics/
 
 .secrets
-dev

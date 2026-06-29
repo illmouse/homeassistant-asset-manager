@@ -7,20 +7,11 @@ templates, cloning, and derived sensors — fully UI-driven, no YAML.
 ## Where to start
 - Vision & overview: `documentation/draft_architecture.md`
 - Architecture: `documentation/architecture.md`
-- Phased plan: `documentation/implementation_plan.md`
-- Progress / hand-off: `documentation/implementation_progress.md`
-- Implementation process: `documentation/implementation_process.md`
-- Dev environment: `documentation/devcontainer-setup.md`
+- Dev environment: `documentation/dev-environment-setup.md`
 
-## "Proceed to next task" workflow
-When the user says "proceed to next task" (or similar), follow the
-process in `documentation/implementation_process.md` verbatim. Summary:
-1. Orient: read `implementation_plan.md` (next unchecked MVP item or
-   agreed post-MVP feature), the cross-phase notes in
-   `implementation_progress.md`, and the relevant existing source under
-   `custom_components/asset_manager/`.
-2. Plan + implement to ~95% confidence, matching existing patterns.
-3. Verify **on the host** (not in the HA container — the official image
+## Verification
+1. Implement to ~95% confidence, matching existing patterns.
+2. Verify **on the host** (not in the HA container — the official image
    has no dev tooling):
    ```
    source .venv/bin/activate
@@ -29,10 +20,7 @@ process in `documentation/implementation_process.md` verbatim. Summary:
    ```
    The HA container (`dev/compose.yml`) is only for running HA itself,
    not for lint/tests.
-4. Record in `implementation_progress.md` (check off item, add Session
-   log entry).
-5. Update the Phase tracker below if a phase boundary moved.
-6. Commit from the host so the pre-commit hook runs. If pre-commit is
+3. Commit from the host so the pre-commit hook runs. If pre-commit is
    not installed on the host, run `ruff check . && ruff format .`
    manually before committing.
 
@@ -51,8 +39,9 @@ custom_components/asset_manager/   # the integration (ships to HA)
   panel.py
   frontend/                  # modular ES modules (no build step)
     asset-manager-panel.js   # entry: AssetManagerPanel class + customElements.define
-    constants.js             # DOMAIN, ENTITY_KINDS, kind→capability sets
+    constants.js             # DOMAIN, ENTITY_KINDS, kind→capability sets, dropdown lists
     dom.js                   # h() hyperscript helper, clear()
+    native-fields.js         # haInput/haSelect/haTextarea wrappers (native + fallback)
     ws.js                    # WebSocket CRUD + subscribe wrappers
     styles.js                # STYLES string + injectStyles()
     ui.js                    # toast, confirmDialog, withBusy, openModal, makeSwitch
@@ -61,15 +50,18 @@ custom_components/asset_manager/   # the integration (ships to HA)
     views.js                 # 3 view renderers (list/detail/templates)
 tests/components/asset_manager/    # pytest (mirrors HA core layout)
 documentation/                     # architecture + plans
-.devcontainer/                    # local HA dev environment
-frontend_extra/asset_manager/      # Settings panel source
+dev/                               # local HA dev environment (tracked + gitignored)
+  compose.yml                      # docker compose stack (HA service) — tracked
+  scripts/                         # dev tooling (setup, bootstrap, test_integration) — tracked
+  config/                          # HA config dir (mounted as /config) — gitignored
+  diagnostics/                     # saved diagnostic exports from HA UI — gitignored
 ```
 
 ## Build & test commands
 
-> **Run lint and tests on the host**, not inside the devcontainer. The
-> container (`loving_sutherland`) has no network and its `.venv` lacks
-> ruff/pytest — it is only for running HA itself (`hass -c config`).
+> **Run lint and tests on the host**, not inside the HA container. The
+> official HA image (`dev/compose.yml`) has no dev tooling — it is only
+> for running HA itself.
 
 ```bash
 # Activate host venv (Python 3.13 + HA 2026.2.3). If missing, recreate:
@@ -92,8 +84,8 @@ pytest tests/components/asset_manager/test_storage.py -x
 pytest tests/components/asset_manager/ \
   --cov=custom_components.asset_manager --cov-report term-missing
 
-# Run HA locally (devcontainer) — http://localhost:8123
-hass -c config
+# Run HA locally (compose stack) — http://localhost:8123
+docker compose -f dev/compose.yml up -d
 ```
 
 ## Test conventions
@@ -108,7 +100,8 @@ hass -c config
   or the flow handler won't register in `HANDLERS`.
 
 ## Iteration philosophy
-- Develop in the devcontainer; iterate fast without pushing to git.
+- Develop against the local compose stack (`dev/compose.yml`); iterate
+  fast without pushing to git.
 - Push to a real HA instance only for end-to-end validation.
 - Never develop against production HA — it hides bugs and frustrates reload.
 
@@ -151,10 +144,5 @@ HA caches Python imports, so most changes require restarting HA:
 - Collection helper source: same repo `homeassistant/helpers/collection.py`
 
 ## Phase tracker
-- [x] Phase 0 — Scaffold
-- [x] Phase 1 — Storage + CRUD
-- [x] Phase 2 — Templates + Clone
-- [x] Phase 3 — Derived sensors
-- [x] Phase 4 — Frontend panel
-- [x] MVP close-out — README, hacs.json, backup note
-- [ ] Post-MVP — refactor + new features (see implementation_plan.md)
+- [x] MVP — shipped (storage, CRUD, templates, clone, derived sensors, frontend panel)
+- [ ] Post-MVP — refactor + new features

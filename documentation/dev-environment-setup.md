@@ -11,14 +11,15 @@ see [Fast iteration loop](#fast-iteration-loop)).
 
 ```
 dev/
-  compose.yml              docker compose stack (HA service)
-  config/                  HA config dir (mounted as /config in container)
+  compose.yml              docker compose stack (HA service) — tracked
+  scripts/                 dev tooling (setup, bootstrap, test_integration) — tracked
+  config/                  HA config dir (mounted as /config in container) — gitignored
     configuration.yaml     default_config + frontend themes
     secrets.yaml           HA secrets (not committed secrets — see below)
     .storage/              HA state, device/entity/area registries
     custom_components/     bind-mounted from ../custom_components/
     home-assistant.log     live log file
-  diagnostics/             saved diagnostic exports from HA UI
+  diagnostics/             saved diagnostic exports from HA UI — gitignored
 custom_components/asset_manager/   the integration (bind-mounted into HA)
 ```
 
@@ -144,7 +145,7 @@ pre-commit run --all-files
 
 ## End-to-end smoke test
 
-`script/test_integration` exercises the config flow and config-entry
+`dev/scripts/test_integration` exercises the config flow and config-entry
 loading against a running HA instance via the REST + WebSocket APIs.
 It requires a long-lived access token in `HASS_TOKEN` (create one in
 HA under **Settings → People → your user → Long-Lived Access Tokens**,
@@ -152,7 +153,7 @@ or use the existing `.secrets` file):
 
 ```bash
 set -a; . .secrets; set +a
-python script/test_integration
+python dev/scripts/test_integration
 ```
 
 ## Pinned versions
@@ -184,7 +185,7 @@ then `docker compose -f dev/compose.yml pull && docker compose -f dev/compose.ym
 - **Secrets**: `dev/config/secrets.yaml` holds HA-level secrets (unused
   by Asset Manager itself). Do not put integration secrets there — use
   the repo-root `.secrets` file (gitignored) for `HASS_TOKEN` used by
-  `script/test_integration`.
+  `dev/scripts/test_integration`.
 
 ## Troubleshooting
 

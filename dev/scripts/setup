@@ -2,7 +2,7 @@
 # One-time environment setup: creates venv, installs deps, links integration.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 if [ ! -d .venv ]; then
