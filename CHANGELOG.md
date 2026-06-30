@@ -5,6 +5,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] — 2026-06-30
+
+Patch release: fixes the panel blinking/refreshing when the "Add asset"
+dialog (or any other modal) was open. A browser-extension console error
+(`trigger-autofill-script-injection.js: Could not establish connection`)
+was a downstream symptom of the DOM churning on every HA state tick.
+
+### Fixed
+
+- **Panel blinked while a modal was open (critical)** — HA reassigns
+  the `hass` property on every state tick (many times per second). The
+  panel's `set hass()` handler called `_subscribe()` unconditionally,
+  which tore down all subscriptions, flashed a "Loading…" state,
+  refetched every collection, re-rendered, and re-subscribed on every
+  tick. Now `_subscribe()` only runs when there are no active
+  subscriptions (i.e. on first connect or after reconnection); steady-
+  state `hass` updates just re-render the existing data.
+- **Excessive shadow-DOM rebuilds** — the `hass`/`narrow`/`panel`
+  setters now coalesce renders through `requestAnimationFrame`, so
+  multiple property updates in the same frame paint once instead of
+  tearing down and rebuilding the DOM several times. Direct callers
+  that need an immediate paint (lifecycle transitions in `_subscribe`,
+  WS event handlers) still call `_render()` synchronously.
+
+[0.1.2]: https://github.com/illmouse/homeassistant-asset-manager/releases/tag/v0.1.2
+
 ## [0.1.1] — 2026-06-29
 
 Patch release: critical bug fixes and UI polish from production

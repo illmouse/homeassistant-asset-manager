@@ -91,18 +91,33 @@ class AssetManagerPanel extends HTMLElement {
       return ["icon", "name", "manufacturer", "model", "entities"];
     })();
     this._assetAreas = new Map(); // asset_id -> area_id
+    this._renderPending = false;
   }
 
   connectedCallback() { injectStyles(); this._render(); }
   disconnectedCallback() { this._unsubscribe(); }
   // HA sets hass/narrow/panel as properties; we re-render on change.
+  // `hass` is reassigned on every HA state tick (many times per second),
+  // so we (1) only (re)subscribe when the connection is fresh (no active
+  // subs — disconnection clears them) and (2) coalesce renders via
+  // requestAnimationFrame to avoid tearing down the shadow DOM on every
+  // tick, which used to cause a visible "blink" (Loading → data).
   static get observedAttributes() { return []; }
-  set hass(v) { this._hass = v; if (v) this._subscribe(); this._render(); }
+  set hass(v) { this._hass = v; if (v && !this._subs.length) this._subscribe(); this._scheduleRender(); }
   get hass() { return this._hass; }
-  set narrow(v) { this._narrow = v; this._render(); }
+  set narrow(v) { this._narrow = v; this._scheduleRender(); }
   get narrow() { return this._narrow; }
-  set panel(v) { this._panel = v; this._render(); }
+  set panel(v) { this._panel = v; this._scheduleRender(); }
   get panel() { return this._panel; }
+
+  // Coalesce multiple property updates into a single rAF. Direct callers
+  // that need an immediate paint (e.g. after a user action) call _render()
+  // directly; this path is for the high-frequency HA property setters.
+  _scheduleRender() {
+    if (this._renderPending) return;
+    this._renderPending = true;
+    requestAnimationFrame(() => { this._renderPending = false; this._render(); });
+  }
 
   _unsubscribe() {
     for (const u of this._subs) { try { u(); } catch {} }
