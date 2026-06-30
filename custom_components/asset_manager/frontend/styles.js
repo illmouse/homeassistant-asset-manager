@@ -276,10 +276,31 @@ export const STYLES = `
   .am-spec-remove { flex: 0 0 auto; padding: 4px 10px; font-size: 12px; }
   .am-spec-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
 
-  /* Reset the h1 slotted into ha-top-app-bar-fixed so HA's .title span
-     styling (font-size/weight) inherits through instead of being
-     overridden by the UA h1 default (2em bold). */
-  ha-top-app-bar-fixed h1.page-title { font-size: inherit; font-weight: inherit; margin: 0; }
+  /* Self-contained top app bar (replaces ha-top-app-bar-fixed, which
+     lives in a lazy HA chunk that never loads on a cold refresh of
+     this panel). Styled with HA CSS vars to match the native look. */
+  .am-topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 4;
+               display: flex; align-items: center; gap: 8px;
+               height: var(--header-height, 56px);
+               padding: 0 16px;
+               padding-top: var(--safe-area-inset-top, 0px);
+               background: var(--app-header-background-color, var(--primary-color));
+               color: var(--app-header-text-color, #fff);
+               border-bottom: var(--app-header-border-bottom, none);
+               box-sizing: border-box; }
+  .am-topbar.am-narrow { padding-left: max(16px, var(--safe-area-inset-left, 0px)); }
+  .am-topbar-btn { background: transparent; border: 0; color: inherit;
+                   cursor: pointer; width: 48px; height: 48px;
+                   display: flex; align-items: center; justify-content: center;
+                   border-radius: 50%; flex: 0 0 auto; }
+  .am-topbar-btn:hover { background: rgba(255,255,255,.12); }
+  .am-topbar-title { font-size: var(--ha-font-size-xl, 20px);
+                     font-weight: var(--ha-font-weight-normal, 500);
+                     margin: 0; line-height: var(--header-height, 56px);
+                     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .am-shell { padding-top: var(--header-height, 56px);
+              padding-top: calc(var(--header-height, 56px) + var(--safe-area-inset-top, 0px));
+              height: 100vh; overflow: auto; box-sizing: border-box; }
 
   /* Toasts */
   #${TOAST_HOST_ID} { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);

@@ -194,47 +194,54 @@ class AssetManagerPanel extends HTMLElement {
           h("div", { class: "am-error" }, String(err.message || err)))));
   }
 
-  // Build the persistent shell ONCE: <style> + <ha-top-app-bar-fixed>
-  // (or a plain placeholder div if HA hasn't registered the element
-  // yet) wrapping a <div class="am-shell"> that holds the view. The
-  // shell survives every _render() tick so Lit never sees its host
-  // torn down mid-paint (the prior clear(this._shadow) on every state
-  // change destroyed the bar before Lit could paint it on prod, where
-  // a WS render storm of N synchronous _render() calls left no quiet
-  // microtask). Only the .am-shell content is swapped per render.
-  // `narrow` is reflected to :host([narrow]) for HA's bar styles; only
-  // touched when it actually changes. When the bar element finishes
-  // registering, we re-render to swap the placeholder for the real bar.
+  // Build the persistent shell ONCE: <style> + a self-contained
+  // <header class="am-topbar"> + <div class="am-shell"> content wrapper.
+  // The shell survives every _render() tick so we never tear down and
+  // rebuild the header (the prior clear(this._shadow) on every state
+  // change destroyed the bar before it could paint). Only the .am-shell
+  // content is swapped per render.
+  //
+  // We render our own top bar instead of HA's <ha-top-app-bar-fixed>
+  // because that element lives in a lazily-loaded HA frontend chunk
+  // that is only fetched when another panel imports it. On a hard
+  // refresh of this panel, no other panel's code runs, the chunk never
+  // loads, whenDefined() never resolves, and the bar never appears.
+  // The self-contained bar is styled with HA CSS vars so it matches the
+  // native look. The hamburger button dispatches `hass-toggle-menu`,
+  // which HA's root shell handles to open the sidebar drawer.
   _ensureShell() {
-    const registered = !!customElements.get("ha-top-app-bar-fixed");
-    const bar = this._shadow.querySelector("ha-top-app-bar-fixed");
-    const placeholder = !bar ? this._shadow.querySelector(".am-shell-bar") : null;
-    const shell = this._shadow.querySelector(".am-shell");
-    if (!shell || (placeholder && registered)) {
+    let header = this._shadow.querySelector(".am-topbar");
+    let shell = this._shadow.querySelector(".am-shell");
+    if (!header) {
       clear(this._shadow);
       this._shadow.append(h("style", {}, STYLES));
-      let barEl;
-      if (registered) {
-        barEl = document.createElement("ha-top-app-bar-fixed");
+      const menuBtn = h("button", {
+        class: "am-topbar-btn",
+        onclick: () => this.dispatchEvent(
+          new CustomEvent("hass-toggle-menu", { bubbles: true, composed: true })),
+      });
+      // Prefer <ha-icon> (matches HA's visual style); fall back to an
+      // inline SVG if ha-icon isn't upgraded yet (it may also live in
+      // a lazy chunk on a cold load).
+      if (customElements.get("ha-icon")) {
+        menuBtn.append(h("ha-icon", { icon: "mdi:menu" }));
       } else {
-        customElements.whenDefined("ha-top-app-bar-fixed")
-          .then(() => this._scheduleRender());
-        barEl = h("div", { class: "am-shell-bar" });
+        menuBtn.insertAdjacentHTML("beforeend",
+          '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">' +
+          '<path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>');
+        customElements.whenDefined("ha-icon").then(() => {
+          menuBtn.innerHTML = "";
+          menuBtn.append(h("ha-icon", { icon: "mdi:menu" }));
+        });
       }
-      barEl.append(h("h1", { slot: "title", class: "page-title" }, "Asset Manager"));
-      const shellEl = h("div", { class: "am-shell" });
-      barEl.append(shellEl);
-      this._shadow.append(barEl);
-      return shellEl;
+      header = h("header", { class: "am-topbar" }, menuBtn,
+        h("h1", { class: "am-topbar-title" }, "Asset Manager"));
+      shell = h("div", { class: "am-shell" });
+      this._shadow.append(header, shell);
     }
-    if (bar) {
-      const wantNarrow = !!this._narrow;
-      const hasNarrow = bar.hasAttribute("narrow");
-      if (wantNarrow !== hasNarrow) {
-        if (wantNarrow) bar.setAttribute("narrow", "");
-        else bar.removeAttribute("narrow");
-      }
-    }
+    const wantNarrow = !!this._narrow;
+    const hasNarrow = header.classList.contains("am-narrow");
+    if (wantNarrow !== hasNarrow) header.classList.toggle("am-narrow", wantNarrow);
     return shell;
   }
 

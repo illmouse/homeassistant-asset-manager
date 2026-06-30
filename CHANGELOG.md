@@ -5,6 +5,29 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.6] — 2026-06-30
+
+Patch release: top app bar still vanished on a hard refresh in
+production (the 0.1.5 persistent-shell fix was necessary but not
+sufficient — the underlying element was never loaded).
+
+### Fixed
+
+- **Top app bar still missing on hard refresh in production
+  (critical)** — `<ha-top-app-bar-fixed>` lives in a lazily-loaded HA
+  frontend chunk that is only fetched when another panel imports it.
+  On a hard refresh of the Asset Manager panel, no other panel's code
+  runs, the chunk never loads, `whenDefined()` never resolves, and the
+  bar never appears (0.1.5's persistent shell kept a placeholder
+  forever). The panel now renders a self-contained
+  `<header class="am-topbar">` styled with HA CSS vars, with zero
+  dependency on HA chunk loading. The hamburger button uses
+  `<ha-icon icon="mdi:menu">` if upgraded, with an inline SVG fallback
+  otherwise, and dispatches `hass-toggle-menu` to open the sidebar
+  drawer.
+
+[0.1.6]: https://github.com/illmouse/homeassistant-asset-manager/compare/v0.1.5...v0.1.6
+
 ## [0.1.5] — 2026-06-30
 
 Patch release: top app bar vanishing on page refresh in production (not
