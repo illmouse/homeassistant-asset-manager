@@ -48,7 +48,7 @@ export function assetCreateDialog(hass, onCreated) {
   const templateSelectOpts = [{ value: "", label: "Blank asset — no template" }];
   const templateSelect = haSelect({
     options: templateSelectOpts,
-    onselected: (v) => { templateSelect._value = v; onTemplateChange(); },
+    onselected: (v) => { templateSelect._value = v; templateSelect.value = v; onTemplateChange(); },
   });
   templateSelect._value = "";
   const err = h("div", { class: "am-error" });
@@ -365,21 +365,21 @@ export function templateEditorDialog(hass, template, onSaved) {
       nameInp.addEventListener("change", () => { spec.name = nameInp.value.trim(); });
       const unitInp = haInput({ value: spec.unit_of_measurement || "", placeholder: "unit" });
       unitInp.addEventListener("change", () => { spec.unit_of_measurement = unitInp.value || undefined; });
-      const rm = h("button", { class: "am-btn danger" }, "Remove");
+      const rm = h("button", { class: "am-btn danger am-spec-remove" }, "Remove");
       rm.addEventListener("click", () => { specs.splice(i, 1); renderSpecs(); });
       const row = h("div", { class: "am-spec-row" },
-        h("div", { class: "am-spec-summary" },
-          h("div", {},
+        h("div", { class: "am-spec-header" },
+          h("span", { class: "am-spec-name" },
             h("span", { style: "font-weight:500" }, spec.name || "(unnamed)"),
             h("span", { class: "am-muted" }, ` · ${spec.slug || "(no slug)"} · ${spec.kind}`)),
-          h("div", { class: "am-spec-grid" },
-            h("div", { class: "am-field" }, h("label", {}, "Slug"), slugInp),
-            h("div", { class: "am-field" }, h("label", {}, "Name"), nameInp),
-            h("div", { class: "am-field" }, h("label", {}, "Icon"), specIconPicker.container),
-            h("div", { class: "am-field" }, h("label", {}, "Unit"), unitInp)),
-          h("div", { class: "am-field", style: "margin-top:6px" }, h("label", {}, "Kind"), kindSel),
-          cfgFields.container),
-        h("div", { class: "am-spec-actions" }, rm));
+          rm),
+        h("div", { class: "am-spec-grid" },
+          h("div", { class: "am-field" }, h("label", {}, "Slug"), slugInp),
+          h("div", { class: "am-field" }, h("label", {}, "Name"), nameInp),
+          h("div", { class: "am-field" }, h("label", {}, "Icon"), specIconPicker.container),
+          h("div", { class: "am-field" }, h("label", {}, "Unit"), unitInp)),
+        h("div", { class: "am-field", style: "margin-top:6px" }, h("label", {}, "Kind"), kindSel),
+        cfgFields.container);
       specsList.append(row);
       // Stash the config reader and icon picker so we can collect on submit.
       spec._read = cfgFields.read;

@@ -205,6 +205,11 @@ class AssetManagerPanel extends HTMLElement {
   // element lives in the shadow DOM; HA defines it globally so it
   // upgrades regardless of our module's isolated registry.
   _wrapTopBar(content) {
+    if (!customElements.get("ha-top-app-bar-fixed")) {
+      customElements.whenDefined("ha-top-app-bar-fixed")
+        .then(() => this._scheduleRender());
+      return h("div", {}, content);
+    }
     const bar = document.createElement("ha-top-app-bar-fixed");
     if (this._narrow) bar.setAttribute("narrow", "");
     bar.append(

@@ -268,14 +268,13 @@ export const STYLES = `
   .am-advanced-toggle { margin-top: 12px; }
   .am-advanced-toggle summary { cursor: pointer; color: var(--secondary-text-color, #888); font-size: 13px; }
 
-  .am-spec-row { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0;
+  .am-spec-row { display: flex; flex-direction: column; gap: 8px; padding: 8px 0;
                  border-bottom: 1px solid var(--divider-color, #eee); }
   .am-spec-row:last-child { border-bottom: none; }
-  .am-spec-row .am-spec-summary { flex: 1 1 auto; min-width: 0; }
-  .am-spec-row .am-spec-summary > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .am-spec-row .am-spec-actions { display: flex; gap: 6px; flex: 0 0 auto; }
-  .am-spec-row .am-btn { padding: 4px 10px; font-size: 12px; }
-  .am-spec-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; margin-top: 6px; }
+  .am-spec-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .am-spec-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .am-spec-remove { flex: 0 0 auto; padding: 4px 10px; font-size: 12px; }
+  .am-spec-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
 
   /* Reset the h1 slotted into ha-top-app-bar-fixed so HA's .title span
      styling (font-size/weight) inherits through instead of being
@@ -321,11 +320,6 @@ export const STYLES = `
   .am-narrow .am-sort { width: 100%; }
   .am-narrow .am-filter-btn { width: 100%; }
   .am-narrow .am-col-picker { align-self: flex-end; }
-  /* Template editor spec row → stacked card. Summary full-width on top,
-     Remove button full-width below. */
-  .am-narrow .am-spec-row { flex-direction: column; align-items: stretch; }
-  .am-narrow .am-spec-actions { width: 100%; }
-  .am-narrow .am-spec-actions .am-btn { width: 100%; }
 
   /* CSS-only fallback: identical rules driven by viewport instead of
      the JS narrow prop. Mirrors the .am-narrow block above so modals
@@ -347,9 +341,6 @@ export const STYLES = `
     .am-sort { width: 100%; }
     .am-filter-btn { width: 100%; }
     .am-col-picker { align-self: flex-end; }
-    .am-spec-row { flex-direction: column; align-items: stretch; }
-    .am-spec-actions { width: 100%; }
-    .am-spec-actions .am-btn { width: 100%; }
   }
 `;
 

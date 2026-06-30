@@ -5,6 +5,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.4] — 2026-06-30
+
+Patch release: top app bar render race on page refresh, template editor
+spec row layout, and template-select display label.
+
+### Fixed
+
+- **Top app bar unstyled on page refresh (prod only)** — on a hard
+  refresh the panel module loaded before HA had registered
+  `<ha-top-app-bar-fixed>`, so the title rendered as plain text with
+  no bar. The panel now detects the unregistered element, renders
+  content bare, and re-renders once the element upgrades.
+
+- **Template editor spec row wasted space on desktop** — the Remove
+  button occupied a right-side column leaving empty vertical space
+  beside the input grid. The row is now a vertical stack: a header
+  line (name · slug · kind + inline Remove button) above the
+  full-width input grid. Desktop and mobile both get full-width
+  fields.
+
+- **Template select did not visually fill when picked** — selecting a
+  template in the new-asset dialog applied it on submit but the
+  trigger label stayed on "Blank asset". `ha-select` does not sync its
+  own `.value` on the `selected` event, so the panel now sets it
+  explicitly (same fix as the area picker in 0.1.3).
+
 ## [0.1.3] — 2026-06-30
 
 Patch release: mobile-view fixes (missing top app bar / burger menu,
@@ -46,6 +72,7 @@ selection bug.
   area).
 
 [0.1.3]: https://github.com/illmouse/homeassistant-asset-manager/compare/v0.1.2...v0.1.3
+[0.1.4]: https://github.com/illmouse/homeassistant-asset-manager/compare/v0.1.3...v0.1.4
 
 ## [0.1.2] — 2026-06-30
 
