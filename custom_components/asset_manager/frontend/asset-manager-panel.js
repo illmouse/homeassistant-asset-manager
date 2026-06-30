@@ -186,43 +186,63 @@ class AssetManagerPanel extends HTMLElement {
   }
 
   _renderError(err) {
-    clear(this._shadow).append(
-      h("style", {}, STYLES),
-      this._wrapTopBar(
-        h("div", { class: "am-root" },
-          h("div", { class: "am-card" },
-            h("h2", { class: "am-title" }, "Asset Manager"),
-            h("div", { class: "am-error" }, String(err.message || err))))));
+    const shell = this._ensureShell();
+    clear(shell).append(
+      h("div", { class: "am-root" },
+        h("div", { class: "am-card" },
+          h("h2", { class: "am-title" }, "Asset Manager"),
+          h("div", { class: "am-error" }, String(err.message || err)))));
   }
 
-  // Wrap `content` in HA's `<ha-top-app-bar-fixed>` so the mobile top
-  // app bar with the hamburger menu button appears (HA's shell does
-  // NOT render a top bar for custom panels — each panel must render
-  // its own). The `navigationIcon` slot is left empty so the bar
-  // auto-renders `<ha-menu-button>`, which dispatches `hass-toggle-menu`
-  // (handled by the root shell to open the sidebar drawer on mobile).
-  // `narrow` is reflected to `:host([narrow])` for HA's bar styles. The
-  // element lives in the shadow DOM; HA defines it globally so it
-  // upgrades regardless of our module's isolated registry.
-  _wrapTopBar(content) {
-    if (!customElements.get("ha-top-app-bar-fixed")) {
-      customElements.whenDefined("ha-top-app-bar-fixed")
-        .then(() => this._scheduleRender());
-      return h("div", {}, content);
+  // Build the persistent shell ONCE: <style> + <ha-top-app-bar-fixed>
+  // (or a plain placeholder div if HA hasn't registered the element
+  // yet) wrapping a <div class="am-shell"> that holds the view. The
+  // shell survives every _render() tick so Lit never sees its host
+  // torn down mid-paint (the prior clear(this._shadow) on every state
+  // change destroyed the bar before Lit could paint it on prod, where
+  // a WS render storm of N synchronous _render() calls left no quiet
+  // microtask). Only the .am-shell content is swapped per render.
+  // `narrow` is reflected to :host([narrow]) for HA's bar styles; only
+  // touched when it actually changes. When the bar element finishes
+  // registering, we re-render to swap the placeholder for the real bar.
+  _ensureShell() {
+    const registered = !!customElements.get("ha-top-app-bar-fixed");
+    const bar = this._shadow.querySelector("ha-top-app-bar-fixed");
+    const placeholder = !bar ? this._shadow.querySelector(".am-shell-bar") : null;
+    const shell = this._shadow.querySelector(".am-shell");
+    if (!shell || (placeholder && registered)) {
+      clear(this._shadow);
+      this._shadow.append(h("style", {}, STYLES));
+      let barEl;
+      if (registered) {
+        barEl = document.createElement("ha-top-app-bar-fixed");
+      } else {
+        customElements.whenDefined("ha-top-app-bar-fixed")
+          .then(() => this._scheduleRender());
+        barEl = h("div", { class: "am-shell-bar" });
+      }
+      barEl.append(h("h1", { slot: "title", class: "page-title" }, "Asset Manager"));
+      const shellEl = h("div", { class: "am-shell" });
+      barEl.append(shellEl);
+      this._shadow.append(barEl);
+      return shellEl;
     }
-    const bar = document.createElement("ha-top-app-bar-fixed");
-    if (this._narrow) bar.setAttribute("narrow", "");
-    bar.append(
-      h("h1", { slot: "title", class: "page-title" }, "Asset Manager"));
-    bar.append(content);
-    return bar;
+    if (bar) {
+      const wantNarrow = !!this._narrow;
+      const hasNarrow = bar.hasAttribute("narrow");
+      if (wantNarrow !== hasNarrow) {
+        if (wantNarrow) bar.setAttribute("narrow", "");
+        else bar.removeAttribute("narrow");
+      }
+    }
+    return shell;
   }
 
   _render() {
-    // Preserve keyboard focus across the full shadow-DOM rebuild that
-    // follows: if an input/textarea with a data-field attribute has
-    // focus, snapshot its name + selection, then restore after rebuild.
-    // This keeps the caret in place when auto-save triggers a re-render.
+    // Preserve keyboard focus across the shell-content swap: if an
+    // input/textarea with a data-field attribute has focus, snapshot
+    // its name + selection, then restore after rebuild. This keeps
+    // the caret in place when auto-save triggers a re-render.
     let focusSnapshot = null;
     const active = this._shadow.activeElement;
     if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")
@@ -233,22 +253,21 @@ class AssetManagerPanel extends HTMLElement {
         end: active.selectionEnd,
       };
     }
-    const root = clear(this._shadow);
-    if (!this._hass) return;
-    root.append(h("style", {}, STYLES));
+    const shell = this._ensureShell();
+    if (!this._hass) { clear(shell); return; }
     if (!this._loaded) {
-      root.append(this._wrapTopBar(
+      clear(shell).append(
         h("div", { class: "am-root" },
           h("div", { class: "am-card" },
             h("h2", { class: "am-title" }, "Asset Manager"),
-            h("p", { class: "am-muted" }, h("span", { class: "am-spinner" }), " Loading…")))));
+            h("p", { class: "am-muted" }, h("span", { class: "am-spinner" }), " Loading…"))));
       return;
     }
     let viewEl;
     if (this._view.name === "list") viewEl = renderListView(this);
     else if (this._view.name === "detail") viewEl = renderDetailView(this);
     else if (this._view.name === "templates") viewEl = renderTemplatesView(this);
-    root.append(this._wrapTopBar(viewEl));
+    clear(shell).append(viewEl);
     if (focusSnapshot) {
       const el = this._shadow.querySelector(`[data-field="${CSS.escape(focusSnapshot.field)}"]`);
       if (el) {

@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.5] — 2026-06-30
+
+Patch release: top app bar vanishing on page refresh in production (not
+dev) with many assets.
+
+### Fixed
+
+- **Top app bar vanished on page refresh in production (critical)** —
+  on a hard refresh with tens/hundreds of assets, the
+  `<ha-top-app-bar-fixed>` element was destroyed and recreated on every
+  state tick (the WS subscribe storm delivers N synchronous `_render()`
+  calls, each calling `clear(this._shadow)`), tearing the LitElement
+  host down before Lit could ever paint it. The bar now lives in a
+  persistent shell: `_ensureShell()` builds `<style>` + the bar + a
+  `<div class="am-shell">` content wrapper once and only swaps the
+  content on subsequent renders. The Lit host is never torn down
+  mid-paint.
+
+[0.1.5]: https://github.com/illmouse/homeassistant-asset-manager/compare/v0.1.4...v0.1.5
+
 ## [0.1.4] — 2026-06-30
 
 Patch release: top app bar render race on page refresh, template editor
