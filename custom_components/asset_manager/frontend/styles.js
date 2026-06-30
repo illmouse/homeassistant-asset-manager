@@ -277,6 +277,11 @@ export const STYLES = `
   .am-spec-row .am-btn { padding: 4px 10px; font-size: 12px; }
   .am-spec-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; margin-top: 6px; }
 
+  /* Reset the h1 slotted into ha-top-app-bar-fixed so HA's .title span
+     styling (font-size/weight) inherits through instead of being
+     overridden by the UA h1 default (2em bold). */
+  ha-top-app-bar-fixed h1.page-title { font-size: inherit; font-weight: inherit; margin: 0; }
+
   /* Toasts */
   #${TOAST_HOST_ID} { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
                       z-index: 200; display: flex; flex-direction: column; gap: 8px;
@@ -316,6 +321,11 @@ export const STYLES = `
   .am-narrow .am-sort { width: 100%; }
   .am-narrow .am-filter-btn { width: 100%; }
   .am-narrow .am-col-picker { align-self: flex-end; }
+  /* Template editor spec row → stacked card. Summary full-width on top,
+     Remove button full-width below. */
+  .am-narrow .am-spec-row { flex-direction: column; align-items: stretch; }
+  .am-narrow .am-spec-actions { width: 100%; }
+  .am-narrow .am-spec-actions .am-btn { width: 100%; }
 
   /* CSS-only fallback: identical rules driven by viewport instead of
      the JS narrow prop. Mirrors the .am-narrow block above so modals
@@ -337,6 +347,9 @@ export const STYLES = `
     .am-sort { width: 100%; }
     .am-filter-btn { width: 100%; }
     .am-col-picker { align-self: flex-end; }
+    .am-spec-row { flex-direction: column; align-items: stretch; }
+    .am-spec-actions { width: 100%; }
+    .am-spec-actions .am-btn { width: 100%; }
   }
 `;
 

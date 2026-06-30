@@ -5,6 +5,48 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] — 2026-06-30
+
+Patch release: mobile-view fixes (missing top app bar / burger menu,
+squeezed entity config fields on narrow viewports) and an area-picker
+selection bug.
+
+### Fixed
+
+- **Missing top app bar / burger menu on mobile (critical)** — the
+  panel rendered no `<ha-top-app-bar-fixed>` wrapper, so on narrow
+  viewports there was no hamburger button to open the sidebar drawer.
+  Every other HA panel renders its own top app bar; now this panel does
+  too. The burger (`<ha-menu-button>`) auto-fills the `navigationIcon`
+  slot and dispatches `hass-toggle-menu` to open the drawer.
+- **Entity config fields squeezed on mobile** — three root causes:
+  (a) modals are appended to `document.body` (light DOM) so the
+  `.am-root.am-narrow` scoped CSS never matched modal content; the
+  narrow rules are now unscoped on `.am-narrow` with a
+  `@media (max-width: 870px)` CSS-only fallback; (b) the template
+  editor spec rows used an inline 4-column grid that never collapsed
+  on mobile — replaced with a `.am-spec-grid` class that collapses to
+  one column; (c) entity list rows (checkbox + summary + inline value +
+  toggle + Edit) crammed onto one line — restructured into a stacked
+  two-line card (`.am-entity-row` with `.am-entity-head` + `.am-entity-controls`).
+- **Template editor spec row wasted space on mobile** — the Remove
+  button sat in a narrow right column leaving empty vertical space
+  below the tall summary. On narrow viewports the row now stacks:
+  summary full-width on top, Remove button full-width below.
+- **Top app bar title oversized and bold** — the slotted `<h1>` kept
+  its user-agent default `2em bold`, overriding HA's `.title` span
+  styling. Reset via `ha-top-app-bar-fixed h1.page-title { font-size:
+  inherit; font-weight: inherit; margin: 0; }`.
+- **Area not filled after selecting in list / new asset dialog
+  (critical)** — `ha-select`'s `_handleSelect` dispatches the
+  `selected` event but never updates its own `.value` property; the
+  consumer must sync it back. The area-picker's `onselected` callback
+  now sets both `select._value` (the picker's read source) and
+  `select.value` (so `ha-select`'s display label matches the picked
+  area).
+
+[0.1.3]: https://github.com/illmouse/homeassistant-asset-manager/compare/v0.1.2...v0.1.3
+
 ## [0.1.2] — 2026-06-30
 
 Patch release: fixes the panel blinking/refreshing when the "Add asset"

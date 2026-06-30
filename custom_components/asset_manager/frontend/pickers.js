@@ -75,7 +75,7 @@ export function buildAreaPicker(hass, initial = null, onChange = null) {
   const select = haSelect({
     options,
     value: initial || "",
-    onselected: (v) => { if (onChange) onChange(v || null); },
+    onselected: (v) => { select._value = v || ""; select.value = v || ""; if (onChange) onChange(v || null); },
   });
   select._value = initial || "";
   const container = h("div", { class: "am-area-picker" }, select);
