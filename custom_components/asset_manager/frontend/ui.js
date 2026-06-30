@@ -33,9 +33,9 @@ export const showToast = (message, kind = "info", timeout = 3500) => {
   return t;
 };
 
-export const openModal = (contentEl) => {
+export const openModal = (contentEl, { narrow = false } = {}) => {
   const bg = h("div", { class: "am-modal-bg" });
-  const box = h("div", { class: "am-modal" });
+  const box = h("div", { class: `am-modal${narrow ? " am-narrow" : ""}` });
   box.append(contentEl);
   bg.append(box);
   bg.addEventListener("click", (e) => { if (e.target === bg) bg.remove(); });

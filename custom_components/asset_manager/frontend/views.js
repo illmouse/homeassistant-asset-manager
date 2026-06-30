@@ -879,8 +879,9 @@ function renderEntitiesTab(panel, hass, asset, entities) {
     const editBtn = h("button", { class: "am-btn secondary",
       onClick: () => entityEditorDialog(hass, asset, e, () => {}) }, "Edit");
 
-    list.append(h("div", { class: "am-row" },
-      checkbox, summary, inlineValue, toggle, editBtn));
+    list.append(h("div", { class: "am-row am-entity-row" },
+      h("div", { class: "am-entity-head" }, checkbox, summary),
+      h("div", { class: "am-entity-controls" }, inlineValue, toggle, editBtn)));
   }
 
   wrap.append(batchBar, list, h("div", { style: "margin-top:12px" }, add));

@@ -372,7 +372,7 @@ export function templateEditorDialog(hass, template, onSaved) {
           h("div", {},
             h("span", { style: "font-weight:500" }, spec.name || "(unnamed)"),
             h("span", { class: "am-muted" }, ` · ${spec.slug || "(no slug)"} · ${spec.kind}`)),
-          h("div", { style: "display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:6px; margin-top:6px" },
+          h("div", { class: "am-spec-grid" },
             h("div", { class: "am-field" }, h("label", {}, "Slug"), slugInp),
             h("div", { class: "am-field" }, h("label", {}, "Name"), nameInp),
             h("div", { class: "am-field" }, h("label", {}, "Icon"), specIconPicker.container),

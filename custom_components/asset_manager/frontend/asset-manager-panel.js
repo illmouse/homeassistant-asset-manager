@@ -188,10 +188,29 @@ class AssetManagerPanel extends HTMLElement {
   _renderError(err) {
     clear(this._shadow).append(
       h("style", {}, STYLES),
-      h("div", { class: "am-root" },
-        h("div", { class: "am-card" },
-          h("h2", { class: "am-title" }, "Asset Manager"),
-          h("div", { class: "am-error" }, String(err.message || err)))));
+      this._wrapTopBar(
+        h("div", { class: "am-root" },
+          h("div", { class: "am-card" },
+            h("h2", { class: "am-title" }, "Asset Manager"),
+            h("div", { class: "am-error" }, String(err.message || err))))));
+  }
+
+  // Wrap `content` in HA's `<ha-top-app-bar-fixed>` so the mobile top
+  // app bar with the hamburger menu button appears (HA's shell does
+  // NOT render a top bar for custom panels — each panel must render
+  // its own). The `navigationIcon` slot is left empty so the bar
+  // auto-renders `<ha-menu-button>`, which dispatches `hass-toggle-menu`
+  // (handled by the root shell to open the sidebar drawer on mobile).
+  // `narrow` is reflected to `:host([narrow])` for HA's bar styles. The
+  // element lives in the shadow DOM; HA defines it globally so it
+  // upgrades regardless of our module's isolated registry.
+  _wrapTopBar(content) {
+    const bar = document.createElement("ha-top-app-bar-fixed");
+    if (this._narrow) bar.setAttribute("narrow", "");
+    bar.append(
+      h("h1", { slot: "title", class: "page-title" }, "Asset Manager"));
+    bar.append(content);
+    return bar;
   }
 
   _render() {
@@ -213,15 +232,18 @@ class AssetManagerPanel extends HTMLElement {
     if (!this._hass) return;
     root.append(h("style", {}, STYLES));
     if (!this._loaded) {
-      root.append(h("div", { class: "am-root" },
-        h("div", { class: "am-card" },
-          h("h2", { class: "am-title" }, "Asset Manager"),
-          h("p", { class: "am-muted" }, h("span", { class: "am-spinner" }), " Loading…"))));
+      root.append(this._wrapTopBar(
+        h("div", { class: "am-root" },
+          h("div", { class: "am-card" },
+            h("h2", { class: "am-title" }, "Asset Manager"),
+            h("p", { class: "am-muted" }, h("span", { class: "am-spinner" }), " Loading…")))));
       return;
     }
-    if (this._view.name === "list") root.append(renderListView(this));
-    else if (this._view.name === "detail") root.append(renderDetailView(this));
-    else if (this._view.name === "templates") root.append(renderTemplatesView(this));
+    let viewEl;
+    if (this._view.name === "list") viewEl = renderListView(this);
+    else if (this._view.name === "detail") viewEl = renderDetailView(this);
+    else if (this._view.name === "templates") viewEl = renderTemplatesView(this);
+    root.append(this._wrapTopBar(viewEl));
     if (focusSnapshot) {
       const el = this._shadow.querySelector(`[data-field="${CSS.escape(focusSnapshot.field)}"]`);
       if (el) {

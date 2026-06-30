@@ -107,6 +107,12 @@ export const STYLES = `
                                         text-overflow: ellipsis; white-space: nowrap; }
   .am-entity-summary .am-entity-meta { color: var(--secondary-text-color, #888); font-size: 13px;
                                         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Entity list row: head (checkbox + name/slug) and controls (value +
+     toggle + Edit) are sub-flex rows so they can reflow to a stacked
+     card on narrow (see narrow section below). On wide they remain on
+     one line. */
+  .am-entity-head { display: flex; align-items: center; gap: 12px; flex: 1 1 auto; min-width: 0; }
+  .am-entity-controls { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
   .am-batch-bar { display: flex; gap: 8px; align-items: center; padding: 8px 0;
                   border-bottom: 1px solid var(--divider-color, #eee); margin-bottom: 8px;
                   color: var(--secondary-text-color, #888); font-size: 13px; flex-wrap: wrap; }
@@ -269,6 +275,7 @@ export const STYLES = `
   .am-spec-row .am-spec-summary > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .am-spec-row .am-spec-actions { display: flex; gap: 6px; flex: 0 0 auto; }
   .am-spec-row .am-btn { padding: 4px 10px; font-size: 12px; }
+  .am-spec-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; margin-top: 6px; }
 
   /* Toasts */
   #${TOAST_HOST_ID} { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
@@ -283,17 +290,54 @@ export const STYLES = `
   .am-toast.am-toast-success { border-left-color: var(--state-active-color, #4caf50); }
   .am-toast.am-toast-show { opacity: 1; transform: translateY(0); }
 
-  /* Narrow (mobile) layout */
+  /* Narrow (mobile) layout.
+   *
+   * Rules are scoped on .am-narrow (NOT .am-root.am-narrow) so they
+   * also apply to light-DOM modals, which openModal() appends to
+   * document.body (outside the panel shadow root). openModal()
+   * mirrors the panel's narrow state onto .am-modal as the
+   * am-narrow class. A @media (max-width: 870px) block at the end
+   * mirrors every rule as a CSS-only fallback so modals respond on
+   * mobile even when the JS narrow prop hasn't been threaded through.
+   */
   .am-root.am-narrow { padding: 8px; }
-  .am-root.am-narrow .am-grid { grid-template-columns: 1fr; }
-  .am-root.am-narrow .am-row { flex-wrap: wrap; }
-  .am-root.am-narrow .am-btn-row .am-btn { flex: 1 1 auto; }
-  .am-root.am-narrow .am-inline-value { width: 100%; flex: 1 1 100%; }
-  .am-root.am-narrow .am-batch-bar .am-btn { flex: 1 1 auto; }
-  .am-root.am-narrow .am-filters { flex-direction: column; align-items: stretch; }
-  .am-root.am-narrow .am-sort { width: 100%; }
-  .am-root.am-narrow .am-filter-btn { width: 100%; }
-  .am-root.am-narrow .am-col-picker { align-self: flex-end; }
+  .am-narrow .am-grid { grid-template-columns: 1fr; }
+  .am-narrow .am-spec-grid { grid-template-columns: 1fr; }
+  .am-modal.am-narrow { padding: 12px; }
+  /* Entity list row → stacked card. Head on top, controls below. */
+  .am-narrow .am-entity-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  .am-narrow .am-entity-head { width: 100%; }
+  .am-narrow .am-entity-controls { width: 100%; justify-content: space-between; }
+  .am-narrow .am-inline-value { width: 100%; flex: 1 1 100%; }
+  .am-narrow .am-row { flex-wrap: wrap; }
+  .am-narrow .am-btn-row .am-btn { flex: 1 1 auto; }
+  .am-narrow .am-batch-bar .am-btn { flex: 1 1 auto; }
+  .am-narrow .am-filters { flex-direction: column; align-items: stretch; }
+  .am-narrow .am-sort { width: 100%; }
+  .am-narrow .am-filter-btn { width: 100%; }
+  .am-narrow .am-col-picker { align-self: flex-end; }
+
+  /* CSS-only fallback: identical rules driven by viewport instead of
+     the JS narrow prop. Mirrors the .am-narrow block above so modals
+     (light DOM) and any path that doesn't thread narrow still get a
+     mobile layout. 870px is HA's own narrow breakpoint. */
+  @media (max-width: 870px) {
+    .am-root { padding: 8px; }
+    .am-grid { grid-template-columns: 1fr; }
+    .am-spec-grid { grid-template-columns: 1fr; }
+    .am-modal { padding: 12px; }
+    .am-entity-row { flex-direction: column; align-items: stretch; gap: 8px; }
+    .am-entity-head { width: 100%; }
+    .am-entity-controls { width: 100%; justify-content: space-between; }
+    .am-inline-value { width: 100%; flex: 1 1 100%; }
+    .am-row { flex-wrap: wrap; }
+    .am-btn-row .am-btn { flex: 1 1 auto; }
+    .am-batch-bar .am-btn { flex: 1 1 auto; }
+    .am-filters { flex-direction: column; align-items: stretch; }
+    .am-sort { width: 100%; }
+    .am-filter-btn { width: 100%; }
+    .am-col-picker { align-self: flex-end; }
+  }
 `;
 
 export const injectStyles = () => {
